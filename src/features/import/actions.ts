@@ -36,73 +36,62 @@ export async function importGastos(formData: FormData): Promise<ImportResult> {
 
   const buffer = Buffer.from(await file.arrayBuffer())
   const { transactions: rows, warnings } = parseGastosWorkbook(buffer)
+  if (rows.length === 0) return { inserted: 0, skipped: 0, warnings }
 
-  let inserted = 0
-  let skipped = 0
-
-  for (const row of rows) {
-    // Upsert category
-    let categoryId: string | null = null
-    const existingCategory = await db
-      .select({ id: categories.id })
-      .from(categories)
-      .where(and(eq(categories.name, row.categoryName), isNull(categories.archivedAt)))
-      .limit(1)
-
-    if (existingCategory.length > 0) {
-      categoryId = existingCategory[0].id
-    } else {
-      const [newCategory] = await db.insert(categories).values({ name: row.categoryName }).returning({ id: categories.id })
-      categoryId = newCategory.id
-    }
-
-    // Upsert group if present
-    let groupId: string | null = null
-    if (row.groupName) {
-      const existingGroup = await db
-        .select({ id: groups.id })
-        .from(groups)
-        .where(and(eq(groups.name, row.groupName), isNull(groups.archivedAt)))
-        .limit(1)
-
-      if (existingGroup.length > 0) {
-        groupId = existingGroup[0].id
-      } else {
-        const [newGroup] = await db.insert(groups).values({ name: row.groupName }).returning({ id: groups.id })
-        groupId = newGroup.id
-      }
-    }
-
-    // Idempotency check: deduplicate by (paidAt + amount + description)
-    const existing = await db
-      .select({ id: transactions.id })
-      .from(transactions)
-      .where(
-        and(
-          eq(transactions.paidAt, row.paidAt),
-          eq(transactions.amount, String(row.amount)),
-          row.description ? eq(transactions.description, row.description) : isNull(transactions.description)
-        )
-      )
-      .limit(1)
-
-    if (existing.length > 0) {
-      skipped++
-      continue
-    }
-
-    await db.insert(transactions).values({
-      amount: String(row.amount),
-      paidAt: row.paidAt,
-      categoryId,
-      groupId,
-      description: row.description,
-      prescindible: row.prescindible,
-    })
-    inserted++
+  // Bulk upsert categories
+  const uniqueCategoryNames = [...new Set(rows.map(r => r.categoryName))]
+  const existingCats = await db
+    .select({ id: categories.id, name: categories.name })
+    .from(categories)
+    .where(isNull(categories.archivedAt))
+  const catIdByName = new Map(existingCats.map(c => [c.name, c.id]))
+  const newCatNames = uniqueCategoryNames.filter(n => !catIdByName.has(n))
+  if (newCatNames.length > 0) {
+    const created = await db
+      .insert(categories)
+      .values(newCatNames.map(name => ({ name })))
+      .returning({ id: categories.id, name: categories.name })
+    created.forEach(c => catIdByName.set(c.name, c.id))
   }
 
-  return { inserted, skipped, warnings }
+  // Bulk upsert groups
+  const uniqueGroupNames = [...new Set(rows.map(r => r.groupName).filter(Boolean))] as string[]
+  const existingGrps = await db
+    .select({ id: groups.id, name: groups.name })
+    .from(groups)
+    .where(isNull(groups.archivedAt))
+  const grpIdByName = new Map(existingGrps.map(g => [g.name, g.id]))
+  const newGrpNames = uniqueGroupNames.filter(n => !grpIdByName.has(n))
+  if (newGrpNames.length > 0) {
+    const created = await db
+      .insert(groups)
+      .values(newGrpNames.map(name => ({ name })))
+      .returning({ id: groups.id, name: groups.name })
+    created.forEach(g => grpIdByName.set(g.name, g.id))
+  }
+
+  // Idempotency: fetch existing paidAt timestamps
+  const existingTxns = await db
+    .select({ paidAt: transactions.paidAt })
+    .from(transactions)
+  const existingPaidAts = new Set(existingTxns.map(t => t.paidAt.getTime()))
+
+  // Bulk insert only new rows
+  const toInsert = rows.filter(r => !existingPaidAts.has(r.paidAt.getTime()))
+  if (toInsert.length > 0) {
+    await db.insert(transactions).values(
+      toInsert.map(r => ({
+        amount: String(r.amount),
+        paidAt: r.paidAt,
+        categoryId: catIdByName.get(r.categoryName) ?? null,
+        groupId: r.groupName ? (grpIdByName.get(r.groupName) ?? null) : null,
+        description: r.description,
+        prescindible: r.prescindible,
+      }))
+    )
+  }
+
+  return { inserted: toInsert.length, skipped: rows.length - toInsert.length, warnings }
 }
 
 export async function importSuperchic(formData: FormData): Promise<ImportResult> {
@@ -117,7 +106,7 @@ export async function importSuperchic(formData: FormData): Promise<ImportResult>
   let inserted = 0
   let skipped = 0
 
-  // Upsert accounts
+  // Upsert accounts (only 9, no need to batch)
   const accountIdByName = new Map<string, string>()
   for (const acc of parsedAccounts) {
     const existing = await db
@@ -125,7 +114,6 @@ export async function importSuperchic(formData: FormData): Promise<ImportResult>
       .from(accounts)
       .where(and(eq(accounts.name, acc.name), isNull(accounts.archivedAt)))
       .limit(1)
-
     if (existing.length > 0) {
       accountIdByName.set(acc.name, existing[0].id)
     } else {
@@ -137,85 +125,73 @@ export async function importSuperchic(formData: FormData): Promise<ImportResult>
     }
   }
 
-  // Upsert snapshots
-  for (const snap of snapshots) {
-    const accountId = accountIdByName.get(snap.accountName)
-    if (!accountId) {
-      warnings.push(`Cuenta desconocida: ${snap.accountName}`)
-      continue
-    }
+  // Bulk upsert snapshots
+  const existingSnaps = await db
+    .select({ accountId: monthlySnapshots.accountId, month: monthlySnapshots.month })
+    .from(monthlySnapshots)
+  const existingSnapKeys = new Set(existingSnaps.map(s => `${s.accountId}|${s.month.getTime()}`))
 
-    const existing = await db
-      .select({ id: monthlySnapshots.id })
-      .from(monthlySnapshots)
-      .where(and(eq(monthlySnapshots.accountId, accountId), eq(monthlySnapshots.month, snap.month)))
-      .limit(1)
+  const snapsToInsert = snapshots.filter(s => {
+    const accountId = accountIdByName.get(s.accountName)
+    return accountId && !existingSnapKeys.has(`${accountId}|${s.month.getTime()}`)
+  })
+  skipped += snapshots.length - snapsToInsert.length
 
-    if (existing.length > 0) {
-      skipped++
-      continue
-    }
-
-    await db.insert(monthlySnapshots).values({
-      accountId,
-      month: snap.month,
-      openingBalance: String(snap.openingBalance),
-      closingBalance: String(snap.closingBalance),
-      contributions: String(snap.contributions),
-      gainManual: snap.gainManual != null ? String(snap.gainManual) : null,
-    })
-    inserted++
+  if (snapsToInsert.length > 0) {
+    await db.insert(monthlySnapshots).values(
+      snapsToInsert.map(s => ({
+        accountId: accountIdByName.get(s.accountName)!,
+        month: s.month,
+        openingBalance: String(s.openingBalance),
+        closingBalance: String(s.closingBalance),
+        contributions: String(s.contributions),
+        gainManual: s.gainManual != null ? String(s.gainManual) : null,
+      }))
+    )
+    inserted += snapsToInsert.length
   }
 
-  // Upsert income sources and incomes
-  const sourceIdByName = new Map<string, string>()
-  for (const inc of parsedIncomes) {
-    let sourceId = sourceIdByName.get(inc.sourceNameRaw)
-    if (!sourceId) {
-      const existing = await db
-        .select({ id: incomeSources.id })
-        .from(incomeSources)
-        .where(and(eq(incomeSources.name, inc.sourceNameRaw), isNull(incomeSources.archivedAt)))
-        .limit(1)
+  // Bulk upsert income sources
+  const uniqueSourceNames = [...new Set(parsedIncomes.map(i => i.sourceNameRaw))]
+  const existingSources = await db
+    .select({ id: incomeSources.id, name: incomeSources.name })
+    .from(incomeSources)
+    .where(isNull(incomeSources.archivedAt))
+  const sourceIdByName = new Map(existingSources.map(s => [s.name, s.id]))
+  const newSourceNames = uniqueSourceNames.filter(n => !sourceIdByName.has(n))
+  if (newSourceNames.length > 0) {
+    const created = await db
+      .insert(incomeSources)
+      .values(newSourceNames.map((name, i) => ({ name, sortOrder: existingSources.length + i })))
+      .returning({ id: incomeSources.id, name: incomeSources.name })
+    created.forEach(s => sourceIdByName.set(s.name, s.id))
+  }
 
-      if (existing.length > 0) {
-        sourceId = existing[0].id
-      } else {
-        const [created] = await db
-          .insert(incomeSources)
-          .values({ name: inc.sourceNameRaw, sortOrder: sourceIdByName.size })
-          .returning({ id: incomeSources.id })
-        sourceId = created.id
-      }
-      sourceIdByName.set(inc.sourceNameRaw, sourceId)
-    }
+  // Bulk upsert incomes
+  const existingIncs = await db
+    .select({ receivedAt: incomes.receivedAt, amount: incomes.amount, incomeSourceId: incomes.incomeSourceId })
+    .from(incomes)
+  const existingIncKeys = new Set(
+    existingIncs.map(i => `${i.receivedAt.getTime()}|${i.amount}|${i.incomeSourceId}`)
+  )
 
-    // Idempotency: deduplicate by (receivedAt + amount + sourceId)
-    const existing = await db
-      .select({ id: incomes.id })
-      .from(incomes)
-      .where(
-        and(
-          eq(incomes.receivedAt, inc.receivedAt),
-          eq(incomes.amount, String(inc.amount)),
-          eq(incomes.incomeSourceId, sourceId)
-        )
-      )
-      .limit(1)
+  const incsToInsert = parsedIncomes.filter(i => {
+    const sourceId = sourceIdByName.get(i.sourceNameRaw)
+    return sourceId && !existingIncKeys.has(`${i.receivedAt.getTime()}|${String(i.amount)}|${sourceId}`)
+  })
+  skipped += parsedIncomes.length - incsToInsert.length
 
-    if (existing.length > 0) {
-      skipped++
-      continue
-    }
-
-    await db.insert(incomes).values({
-      amount: String(inc.amount),
-      receivedAt: inc.receivedAt,
-      budgetMonth: inc.budgetMonth,
-      incomeSourceId: sourceId,
-      description: inc.description,
-    })
-    inserted++
+  if (incsToInsert.length > 0) {
+    await db.insert(incomes).values(
+      incsToInsert.map(i => ({
+        amount: String(i.amount),
+        receivedAt: i.receivedAt,
+        budgetMonth: i.budgetMonth,
+        incomeSourceId: sourceIdByName.get(i.sourceNameRaw)!,
+        description: i.description,
+      }))
+    )
+    inserted += incsToInsert.length
   }
 
   return { inserted, skipped, warnings }
