@@ -9,6 +9,7 @@ import {
   incomes,
   incomeSources,
   monthlySnapshots,
+  budgets,
 } from '@/db/schema'
 import { eq, and, isNull } from 'drizzle-orm'
 
@@ -18,7 +19,7 @@ function toMonthKey(d: Date | string | unknown): string {
   const date = d instanceof Date ? d : new Date(String(d))
   return `${date.getUTCFullYear()}-${date.getUTCMonth()}`
 }
-import { parseGastosWorkbook } from './parsers/gastos'
+import { parseGastosWorkbook, parseDesgloseSheet } from './parsers/gastos'
 import { parseSuperchicWorkbook } from './parsers/superchic'
 import { createClient } from '@/lib/supabase/server'
 
@@ -98,7 +99,30 @@ export async function importGastos(formData: FormData): Promise<ImportResult> {
     )
   }
 
-  return { inserted: toInsert.length, skipped: rows.length - toInsert.length, warnings }
+  // Import budgets from Desglose sheet (total monthly gasto expectativa)
+  const { budgets: parsedBudgets, warnings: budgetWarnings } = parseDesgloseSheet(buffer)
+  warnings.push(...budgetWarnings)
+
+  const existingBudgets = await db
+    .select({ month: budgets.month })
+    .from(budgets)
+  const existingBudgetMonths = new Set(existingBudgets.map(b => toMonthKey(b.month)))
+
+  const budgetsToInsert = parsedBudgets.filter(b => !existingBudgetMonths.has(toMonthKey(b.month)))
+  if (budgetsToInsert.length > 0) {
+    await db.insert(budgets).values(
+      budgetsToInsert.map(b => ({
+        month: b.month,
+        plannedAmount: String(b.plannedAmount),
+      }))
+    )
+  }
+
+  return {
+    inserted: toInsert.length + budgetsToInsert.length,
+    skipped: (rows.length - toInsert.length) + (parsedBudgets.length - budgetsToInsert.length),
+    warnings,
+  }
 }
 
 export async function importSuperchic(formData: FormData): Promise<ImportResult> {

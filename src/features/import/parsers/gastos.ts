@@ -83,3 +83,62 @@ export function parseGastosWorkbook(buffer: Buffer): ParseGastosResult {
 
   return { transactions, warnings }
 }
+
+// ─── Desglose parser ──────────────────────────────────────────────────────────
+
+export type ParsedBudget = {
+  month: Date
+  plannedAmount: number
+}
+
+export type ParseDesgloseResult = {
+  budgets: ParsedBudget[]
+  warnings: string[]
+}
+
+const MONTH_INDEX: Record<string, number> = {
+  Enero: 0, Febrero: 1, Marzo: 2, Abril: 3, Mayo: 4, Junio: 5,
+  Julio: 6, Agosto: 7, Septiembre: 8, Octubre: 9, Noviembre: 10, Diciembre: 11,
+}
+
+// First month in the Desglose sheet is November 2024
+const DESGLOSE_START_YEAR = 2024
+
+export function parseDesgloseSheet(buffer: Buffer): ParseDesgloseResult {
+  const wb = XLSX.read(buffer, { type: 'buffer' })
+  const ws = wb.Sheets['Desglose']
+  if (!ws) throw new Error('Sheet "Desglose" not found')
+
+  const rows = XLSX.utils.sheet_to_json<unknown[]>(ws, { header: 1 })
+  const budgets: ParsedBudget[] = []
+  const warnings: string[] = []
+
+  let currentYear = DESGLOSE_START_YEAR
+  let prevMonthIndex: number | null = null
+
+  for (let i = 0; i < rows.length; i++) {
+    const row = rows[i] as unknown[]
+    if (!row || typeof row[0] !== 'string' || !(row[0] in MONTH_INDEX)) continue
+
+    const monthIndex = MONTH_INDEX[row[0] as string]
+
+    if (prevMonthIndex !== null && monthIndex <= prevMonthIndex) currentYear++
+    prevMonthIndex = monthIndex
+
+    // Expected gasto is at col 14 of the data row (1-4 rows below the header row)
+    let plannedAmount: number | null = null
+    for (let j = i + 1; j < Math.min(i + 5, rows.length); j++) {
+      const val = (rows[j] as unknown[])?.[14]
+      if (typeof val === 'number' && val > 0) { plannedAmount = val; break }
+    }
+
+    if (plannedAmount == null) {
+      warnings.push(`${row[0]} ${currentYear}: sin valor de expectativa`)
+      continue
+    }
+
+    budgets.push({ month: new Date(Date.UTC(currentYear, monthIndex, 1)), plannedAmount })
+  }
+
+  return { budgets, warnings }
+}
