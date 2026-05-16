@@ -182,6 +182,21 @@ export async function importSuperchic(formData: FormData): Promise<ImportResult>
     inserted += snapsToInsert.length
   }
 
+  // Update contributions for snapshots that already existed but had contributions=0
+  const snapsToUpdateContributions = snapshots.filter(s => {
+    const accountId = accountIdByName.get(s.accountName)
+    return accountId && s.contributions !== 0 && existingSnapKeys.has(`${accountId}|${toMonthKey(s.month)}`)
+  })
+  for (const s of snapsToUpdateContributions) {
+    await db
+      .update(monthlySnapshots)
+      .set({ contributions: String(s.contributions), updatedAt: new Date() })
+      .where(and(
+        eq(monthlySnapshots.accountId, accountIdByName.get(s.accountName)!),
+        eq(monthlySnapshots.month, s.month),
+      ))
+  }
+
   // Bulk upsert income sources
   const uniqueSourceNames = [...new Set(parsedIncomes.map(i => i.sourceNameRaw))]
   const existingSources = await db

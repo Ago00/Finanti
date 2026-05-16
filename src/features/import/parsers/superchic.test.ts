@@ -89,6 +89,30 @@ describe('parseSuperchicWorkbook', () => {
     expect(mmOct23!.amount).toBe(609.49)
   })
 
+  it('parses MyInvestor (S&P500) contribution for January 2025 as 1000', () => {
+    const snap = result.snapshots.find(
+      s => s.accountName === 'MyInvestor' && s.month.getUTCFullYear() === 2025 && s.month.getUTCMonth() === 0
+    )
+    expect(snap).toBeDefined()
+    expect(snap!.contributions).toBe(1000)
+  })
+
+  it('parses Civislend contribution for January 2025 as 600', () => {
+    const snap = result.snapshots.find(
+      s => s.accountName === 'Civislend' && s.month.getUTCFullYear() === 2025 && s.month.getUTCMonth() === 0
+    )
+    expect(snap).toBeDefined()
+    expect(snap!.contributions).toBe(600)
+  })
+
+  it('parses Revolut contribution for January 2025 as 154.61', () => {
+    const snap = result.snapshots.find(
+      s => s.accountName === 'Revolut' && s.month.getUTCFullYear() === 2025 && s.month.getUTCMonth() === 0
+    )
+    expect(snap).toBeDefined()
+    expect(snap!.contributions).toBe(154.61)
+  })
+
   it('returns no warnings', () => {
     expect(result.warnings.length).toBe(0)
   })
