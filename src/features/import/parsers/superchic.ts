@@ -53,6 +53,13 @@ const MONTHLY_ACCOUNT_ALIASES: Record<string, string> = {
   'S&P500': 'MyInvestor',
 }
 
+// Corrections for known gaps between SuperChic monthly tabs and real platform records.
+// Key format: "AccountName|year-monthIndex" (same as toMonthKey)
+const KNOWN_CONTRIBUTION_CORRECTIONS: Record<string, number> = {
+  'Civislend|2025-3':  800,      // Apr 2025: extract shows 800€ deposited, tab says 700
+  'Civislend|2026-0': -1031.07,  // Jan 2026: withdrawal confirmed in extract, missing from tab
+}
+
 const INCOME_SOURCE_NAMES = new Set([
   'Parts Marta',
   'Parts Candela',
@@ -220,6 +227,12 @@ export function parseSuperchicWorkbook(buffer: Buffer): ParseSuperchicResult {
     const monthKey = `${snap.month.getUTCFullYear()}-${snap.month.getUTCMonth()}`
     const monthly = contributions.get(snap.accountName)?.get(monthKey)
     if (monthly !== undefined) snap.contributions = monthly
+
+    // Apply known corrections for gaps between SuperChic tabs and real platform records
+    const correctionKey = `${snap.accountName}|${monthKey}`
+    if (correctionKey in KNOWN_CONTRIBUTION_CORRECTIONS) {
+      snap.contributions = KNOWN_CONTRIBUTION_CORRECTIONS[correctionKey]
+    }
   }
 
   return { accounts, snapshots, incomes, warnings }
