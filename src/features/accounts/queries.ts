@@ -6,6 +6,8 @@ import {
   calculateGainPercentage,
   calculateMonthlyChange,
   calculateMonthlyChangePercentage,
+  calculateTotalGain,
+  calculateTotalGainPercentage,
 } from './domain'
 
 export type AccountSnapshot = {
@@ -28,6 +30,8 @@ export type AccountWithBalance = {
   latestSnapshot: AccountSnapshot | null
   monthlyChange: number | null
   monthlyChangePercentage: number | null
+  totalGain: number
+  totalGainPercentage: number
 }
 
 function toSnapshot(
@@ -73,8 +77,19 @@ export async function listAccounts(): Promise<AccountWithBalance[]> {
 
   return allAccounts.map(acc => {
     const snaps = snapshotsByAccount.get(acc.id) ?? []
-    const latest = snaps[0] ? toSnapshot(snaps[0], acc.gainMode) : null
-    const previous = snaps[1] ? toSnapshot(snaps[1], acc.gainMode) : null
+    const parsed = snaps.map(raw => toSnapshot(raw, acc.gainMode))
+    // snaps is desc by month; parsed[0] = latest, parsed[last] = oldest
+    const latest = parsed[0] ?? null
+    const previous = parsed[1] ?? null
+    const oldest = parsed[parsed.length - 1] ?? null
+
+    const totalGain = calculateTotalGain(parsed)
+    const totalContributions = parsed.reduce((sum, s) => sum + s.contributions, 0)
+    const totalGainPercentage = calculateTotalGainPercentage(
+      totalGain,
+      oldest?.openingBalance ?? 0,
+      totalContributions,
+    )
 
     return {
       id: acc.id,
@@ -90,6 +105,8 @@ export async function listAccounts(): Promise<AccountWithBalance[]> {
       monthlyChangePercentage: latest && previous
         ? calculateMonthlyChangePercentage(previous.closingBalance, latest.closingBalance)
         : null,
+      totalGain,
+      totalGainPercentage,
     }
   })
 }

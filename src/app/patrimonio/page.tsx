@@ -82,18 +82,11 @@ export default async function PatrimonioPage() {
                 {acc.latestSnapshot && (
                   <div className="mt-3 flex gap-4 text-xs text-[#64748B]">
                     <span>
-                      Ganancia:{' '}
-                      <span className={acc.latestSnapshot.gain >= 0 ? 'text-emerald-400' : 'text-red-400'}>
-                        {formatCurrency(acc.latestSnapshot.gain)}
-                        {' '}({formatPercent(acc.latestSnapshot.gainPercentage)})
+                      Ganancia total:{' '}
+                      <span className={acc.totalGain >= 0 ? 'text-emerald-400' : 'text-red-400'}>
+                        {formatCurrency(acc.totalGain)}
+                        {' '}({formatPercent(acc.totalGainPercentage)})
                       </span>
-                    </span>
-                    <span>
-                      {new Date(acc.latestSnapshot.month).toLocaleDateString('es-ES', {
-                        month: 'long',
-                        year: 'numeric',
-                        timeZone: 'UTC',
-                      })}
                     </span>
                   </div>
                 )}
