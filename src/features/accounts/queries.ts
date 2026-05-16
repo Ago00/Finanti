@@ -57,6 +57,7 @@ export async function listAccounts(): Promise<AccountWithBalance[]> {
     .where(isNull(accounts.archivedAt))
     .orderBy(accounts.sortOrder)
 
+  // Sorted globally desc; in-memory grouping preserves order so snaps[0]/[1] are the two most-recent per account.
   const allSnapshots = await db
     .select()
     .from(monthlySnapshots)

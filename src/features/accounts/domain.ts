@@ -1,3 +1,9 @@
+export const GAIN_MODE_LABELS: Record<'auto' | 'manual' | 'projects', string> = {
+  auto: 'Auto',
+  manual: 'Manual',
+  projects: 'Proyectos',
+}
+
 export type GainInput = {
   openingBalance: number
   closingBalance: number

@@ -11,9 +11,9 @@ export const CreateAccountSchema = z.object({
   parentAccountId: z.string().uuid().nullable().optional(),
 })
 
-export const UpdateAccountSchema = CreateAccountSchema.partial().extend({
-  id: z.string().uuid(),
-})
+export const UpdateAccountSchema = CreateAccountSchema.partial()
+  .extend({ id: z.string().uuid() })
+  .refine(obj => Object.keys(obj).length > 1, { message: 'At least one field to update required' })
 
 export type CreateAccountInput = z.infer<typeof CreateAccountSchema>
 export type UpdateAccountInput = z.infer<typeof UpdateAccountSchema>

@@ -1,18 +1,21 @@
 'use client'
 
+import { useRouter } from 'next/navigation'
 import { archiveAccount } from '@/features/accounts/actions'
+import { GAIN_MODE_LABELS } from '@/features/accounts/domain'
 import type { AccountWithBalance } from '@/features/accounts/queries'
 
-const GAIN_MODE_LABELS: Record<string, string> = {
-  auto: 'Auto',
-  manual: 'Manual',
-  projects: 'Proyectos',
-}
-
 export function AccountRow({ account }: { account: AccountWithBalance }) {
+  const router = useRouter()
+
   async function handleArchive() {
     if (!confirm(`¿Archivar la cuenta "${account.name}"? No aparecerá en el patrimonio.`)) return
-    await archiveAccount(account.id)
+    try {
+      await archiveAccount(account.id)
+      router.refresh()
+    } catch {
+      alert('Error al archivar la cuenta. Inténtalo de nuevo.')
+    }
   }
 
   return (

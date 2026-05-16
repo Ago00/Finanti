@@ -1,5 +1,7 @@
 import { getAccountWithHistory } from '@/features/accounts/queries'
+import { GAIN_MODE_LABELS } from '@/features/accounts/domain'
 import { notFound } from 'next/navigation'
+import { z } from 'zod'
 import Link from 'next/link'
 
 function formatCurrency(value: number) {
@@ -12,7 +14,7 @@ function formatPercent(value: number) {
 }
 
 function formatMonth(date: Date) {
-  return new Date(date).toLocaleDateString('es-ES', {
+  return date.toLocaleDateString('es-ES', {
     month: 'long',
     year: 'numeric',
     timeZone: 'UTC',
@@ -25,7 +27,10 @@ export default async function AccountDetailPage({
   params: Promise<{ id: string }>
 }) {
   const { id } = await params
-  const result = await getAccountWithHistory(id)
+  const parsed = z.string().uuid().safeParse(id)
+  if (!parsed.success) notFound()
+
+  const result = await getAccountWithHistory(parsed.data)
   if (!result) notFound()
 
   const { account, snapshots } = result
@@ -47,7 +52,7 @@ export default async function AccountDetailPage({
           />
           <h1 className="text-2xl font-semibold text-white">{account.name}</h1>
           <span className="text-xs text-[#64748B] bg-[#1E2A3A] px-2 py-0.5 rounded">
-            {account.gainMode}
+            {GAIN_MODE_LABELS[account.gainMode]}
           </span>
         </div>
 
