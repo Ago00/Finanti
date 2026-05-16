@@ -147,6 +147,9 @@ export async function importSuperchic(formData: FormData): Promise<ImportResult>
       .limit(1)
     if (existing.length > 0) {
       accountIdByName.set(acc.name, existing[0].id)
+      await db.update(accounts)
+        .set({ gainMode: acc.gainMode, updatedAt: new Date() })
+        .where(eq(accounts.id, existing[0].id))
     } else {
       const [created] = await db
         .insert(accounts)
@@ -182,15 +185,17 @@ export async function importSuperchic(formData: FormData): Promise<ImportResult>
     inserted += snapsToInsert.length
   }
 
-  // Update contributions for snapshots that already existed but had contributions=0
-  const snapsToUpdateContributions = snapshots.filter(s => {
+  // Update opening balance + contributions for snapshots that already existed
+  // (covers gainMode changes and the initial-contribution fix for accounts that started from zero)
+  const snapsToUpdate = snapshots.filter(s => {
     const accountId = accountIdByName.get(s.accountName)
-    return accountId && s.contributions !== 0 && existingSnapKeys.has(`${accountId}|${toMonthKey(s.month)}`)
+    return accountId && existingSnapKeys.has(`${accountId}|${toMonthKey(s.month)}`)
+      && (s.contributions !== 0 || s.openingBalance === 0)
   })
-  for (const s of snapsToUpdateContributions) {
+  for (const s of snapsToUpdate) {
     await db
       .update(monthlySnapshots)
-      .set({ contributions: String(s.contributions), updatedAt: new Date() })
+      .set({ openingBalance: String(s.openingBalance), contributions: String(s.contributions), updatedAt: new Date() })
       .where(and(
         eq(monthlySnapshots.accountId, accountIdByName.get(s.accountName)!),
         eq(monthlySnapshots.month, s.month),

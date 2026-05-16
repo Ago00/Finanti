@@ -29,9 +29,9 @@ describe('parseSuperchicWorkbook', () => {
 
   it('assigns correct gainMode to each account', () => {
     const byName = Object.fromEntries(result.accounts.map(a => [a.name, a.gainMode]))
-    expect(byName.Santander).toBe('auto')
-    expect(byName.Civislend).toBe('projects')
-    expect(byName.Restaurante).toBe('manual')
+    expect(byName.Santander).toBe('projects')   // holding account, no returns
+    expect(byName.Civislend).toBe('auto')        // withdrawals as negative contributions
+    expect(byName.Restaurante).toBe('projects')  // spending account, no returns
     expect(byName.BTC).toBe('auto')
   })
 
@@ -53,11 +53,19 @@ describe('parseSuperchicWorkbook', () => {
     expect(earlyMyInvestor.length).toBe(0)
   })
 
-  it('sets opening balance of first snapshot equal to closing', () => {
+  it('sets opening balance of first Santander snapshot equal to closing (data present from start)', () => {
     const firstSantander = result.snapshots
       .filter(s => s.accountName === 'Santander')
       .sort((a, b) => a.month.getTime() - b.month.getTime())[0]
     expect(firstSantander.openingBalance).toBe(firstSantander.closingBalance)
+  })
+
+  it('sets opening=0 and contributions=closingBalance for Civislend first snapshot', () => {
+    const firstCivislend = result.snapshots
+      .filter(s => s.accountName === 'Civislend')
+      .sort((a, b) => a.month.getTime() - b.month.getTime())[0]
+    expect(firstCivislend.openingBalance).toBe(0)
+    expect(firstCivislend.contributions).toBe(firstCivislend.closingBalance)
   })
 
   it('derives opening balance from previous month closing', () => {

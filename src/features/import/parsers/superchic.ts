@@ -37,15 +37,15 @@ const RESUMEN_FIRST_MONTH = new Date(Date.UTC(2023, 9, 1)) // 2023-10-01
 const RESUMEN_DATA_START_COL = 2
 
 const ACCOUNT_CONFIGS: Record<string, { gainMode: 'auto' | 'manual' | 'projects'; sortOrder: number }> = {
-  Santander: { gainMode: 'auto', sortOrder: 0 },
-  Revolut: { gainMode: 'auto', sortOrder: 1 },
-  Azvalor: { gainMode: 'auto', sortOrder: 2 },
-  MyInvestor: { gainMode: 'auto', sortOrder: 3 },
-  Civislend: { gainMode: 'projects', sortOrder: 4 },
-  Trading212: { gainMode: 'auto', sortOrder: 5 },
-  Restaurante: { gainMode: 'manual', sortOrder: 6 },
-  BTC: { gainMode: 'auto', sortOrder: 7 },
-  Cobas: { gainMode: 'auto', sortOrder: 8 },
+  Santander:  { gainMode: 'projects', sortOrder: 0 }, // holding account, no returns
+  Revolut:    { gainMode: 'auto',     sortOrder: 1 },
+  Azvalor:    { gainMode: 'auto',     sortOrder: 2 },
+  MyInvestor: { gainMode: 'auto',     sortOrder: 3 },
+  Civislend:  { gainMode: 'auto',     sortOrder: 4 }, // withdrawals = negative contributions
+  Trading212: { gainMode: 'auto',     sortOrder: 5 },
+  Restaurante:{ gainMode: 'projects', sortOrder: 6 }, // spending account, no returns
+  BTC:        { gainMode: 'auto',     sortOrder: 7 },
+  Cobas:      { gainMode: 'auto',     sortOrder: 8 },
 }
 
 // Monthly sheet tabs use "S&P500" for what RESUMEN calls "MyInvestor"
@@ -92,7 +92,7 @@ function columnToMonth(colIndex: number): Date {
 
 // Parses each monthly tab (e.g. "Enero25") to extract contributions per account per month.
 // Each tab has side-by-side blocks at col 6 and col 11: account name row → header row → data row.
-// The "Ingreso"/"Ingresos" header column holds the contribution amount.
+// The "Ingreso"/"Ingresos" header column holds the contribution amount (negative = withdrawal).
 function parseMonthlyContributions(wb: XLSX.WorkBook): Map<string, Map<string, number>> {
   const result = new Map<string, Map<string, number>>()
   const knownAccounts = new Set(Object.keys(ACCOUNT_CONFIGS))
@@ -152,8 +152,10 @@ export function parseSuperchicWorkbook(buffer: Buffer): ParseSuperchicResult {
   const incomes: ParsedIncome[] = []
   const warnings: string[] = []
 
-  // Track last known closing balance per account for opening balance derivation
   const prevClosing = new Map<string, number>()
+  // Accounts whose RESUMEN data starts with null/dash values began with zero balance.
+  // Their first real snapshot should have opening=0 and contributions=closingBalance.
+  const hadNullsBeforeFirstValue = new Set<string>()
 
   for (let rowIdx = 0; rowIdx < rows.length; rowIdx++) {
     const row = rows[rowIdx] as unknown[]
@@ -168,17 +170,21 @@ export function parseSuperchicWorkbook(buffer: Buffer): ParseSuperchicResult {
 
       for (let colIdx = RESUMEN_DATA_START_COL; colIdx < row.length; colIdx++) {
         const closingBalance = parseNumericCell(row[colIdx])
-        if (closingBalance === null) continue
+        if (closingBalance === null) {
+          if (!prevClosing.has(label)) hadNullsBeforeFirstValue.add(label)
+          continue
+        }
 
         const month = columnToMonth(colIdx)
-        const openingBalance = prevClosing.get(label) ?? closingBalance
+        const isFirst = !prevClosing.has(label)
+        const startsFromZero = isFirst && hadNullsBeforeFirstValue.has(label)
 
         snapshots.push({
           accountName: label,
           month,
-          openingBalance,
+          openingBalance: startsFromZero ? 0 : (prevClosing.get(label) ?? closingBalance),
           closingBalance,
-          contributions: 0, // filled in below from monthly tabs
+          contributions: startsFromZero ? closingBalance : 0, // overwritten below from monthly tabs
           gainManual: null,
         })
 
@@ -207,11 +213,13 @@ export function parseSuperchicWorkbook(buffer: Buffer): ParseSuperchicResult {
     }
   }
 
-  // Merge contributions from monthly tabs into snapshots
+  // Merge contributions from monthly tabs (overrides the startsFromZero initial value
+  // only if the monthly tab has an explicit non-zero entry for that month)
   const contributions = parseMonthlyContributions(wb)
   for (const snap of snapshots) {
     const monthKey = `${snap.month.getUTCFullYear()}-${snap.month.getUTCMonth()}`
-    snap.contributions = contributions.get(snap.accountName)?.get(monthKey) ?? 0
+    const monthly = contributions.get(snap.accountName)?.get(monthKey)
+    if (monthly !== undefined) snap.contributions = monthly
   }
 
   return { accounts, snapshots, incomes, warnings }
