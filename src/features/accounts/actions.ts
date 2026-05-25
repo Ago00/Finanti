@@ -17,8 +17,8 @@ async function requireAuth() {
 }
 
 export async function createAccount(input: CreateAccountInput) {
-  const data = CreateAccountSchema.parse(input)
   await requireAuth()
+  const data = CreateAccountSchema.parse(input)
 
   const [created] = await db
     .insert(accounts)
@@ -40,8 +40,8 @@ export async function createAccount(input: CreateAccountInput) {
 }
 
 export async function updateAccount(input: UpdateAccountInput) {
-  const { id, ...data } = UpdateAccountSchema.parse(input)
   await requireAuth()
+  const { id, ...data } = UpdateAccountSchema.parse(input)
 
   await db
     .update(accounts)
@@ -59,8 +59,8 @@ export async function updateAccount(input: UpdateAccountInput) {
 }
 
 export async function archiveAccount(id: string) {
-  const validId = z.string().uuid().parse(id)
   await requireAuth()
+  const validId = z.string().uuid().parse(id)
 
   await db
     .update(accounts)

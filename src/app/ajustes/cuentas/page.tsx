@@ -1,9 +1,20 @@
-import { listAccounts } from '@/features/accounts/queries'
-import { AccountRow } from './account-row'
+import { redirect } from 'next/navigation'
+import { createClient } from '@/lib/supabase/server'
+import { listAccounts, listAccountTypes } from '@/features/accounts/queries'
+import { listAssetClasses } from '@/features/asset-classes/queries'
+import { AccountsSettings } from '@/features/accounts/components/accounts-settings'
 import Link from 'next/link'
 
 export default async function CuentasPage() {
-  const accounts = await listAccounts()
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) redirect('/login')
+
+  const [accounts, accountTypes, assetClasses] = await Promise.all([
+    listAccounts(),
+    listAccountTypes(),
+    listAssetClasses(),
+  ])
 
   return (
     <div className="min-h-screen bg-[#0B0F1A] py-12 px-6">
@@ -22,15 +33,11 @@ export default async function CuentasPage() {
           </Link>
         </div>
 
-        {accounts.length === 0 ? (
-          <p className="text-[#64748B] text-sm">No hay cuentas activas.</p>
-        ) : (
-          <div className="space-y-2">
-            {accounts.map(acc => (
-              <AccountRow key={acc.id} account={acc} />
-            ))}
-          </div>
-        )}
+        <AccountsSettings
+          initialAccounts={accounts}
+          accountTypes={accountTypes}
+          assetClasses={assetClasses}
+        />
 
       </div>
     </div>

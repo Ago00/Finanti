@@ -126,6 +126,7 @@ export const incomes = pgTable('incomes', {
   receivedAt: timestamp('received_at', { withTimezone: true }).notNull(),
   budgetMonth: timestamp('budget_month', { withTimezone: true }).notNull(),
   incomeSourceId: uuid('income_source_id').references(() => incomeSources.id),
+  toAccountId: uuid('to_account_id').references(() => accounts.id),
   description: text('description'),
   ...timestamps,
 })
@@ -163,6 +164,7 @@ export const budgets = pgTable('budgets', {
   categoryId: uuid('category_id').references(() => categories.id),
   assetClassId: uuid('asset_class_id').references(() => assetClasses.id),
   plannedAmount: numeric('planned_amount', { precision: 12, scale: 2 }).notNull(),
+  actualAmount: numeric('actual_amount', { precision: 12, scale: 2 }).default('0'),
   ...timestamps,
 })
 

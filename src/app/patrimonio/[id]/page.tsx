@@ -1,8 +1,9 @@
 import { getAccountWithHistory } from '@/features/accounts/queries'
 import { GAIN_MODE_LABELS } from '@/features/accounts/domain'
-import { notFound } from 'next/navigation'
+import { notFound, redirect } from 'next/navigation'
 import { z } from 'zod'
 import Link from 'next/link'
+import { createClient } from '@/lib/supabase/server'
 
 function formatCurrency(value: number) {
   return new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(value)
@@ -26,6 +27,10 @@ export default async function AccountDetailPage({
 }: {
   params: Promise<{ id: string }>
 }) {
+  const supabase = await createClient()
+  const { data: { user } } = await supabase.auth.getUser()
+  if (!user) redirect('/login')
+
   const { id } = await params
   const parsed = z.string().uuid().safeParse(id)
   if (!parsed.success) notFound()
