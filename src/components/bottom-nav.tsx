@@ -16,6 +16,8 @@ const items = [
 export function BottomNav() {
   const pathname = usePathname()
 
+  if (pathname === '/login') return null
+
   return (
     <nav className="fixed bottom-0 left-0 right-0 bg-[#0B0F1A] border-t border-[#1E2A3A] flex z-50">
       {items.map(({ label, href, activePrefix, icon: Icon, iconOnly }) => {
