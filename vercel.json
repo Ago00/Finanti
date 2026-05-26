@@ -1,0 +1,7 @@
+{
+  "functions": {
+    "src/app/**": {
+      "regions": ["lhr1"]
+    }
+  }
+}
