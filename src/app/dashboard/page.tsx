@@ -13,10 +13,14 @@ import { BudgetSummaryWidget } from '@/features/dashboard/components/budget-summ
 import { formatMonthLabel } from '@/lib/dates'
 
 export default async function DashboardPage() {
+  const t0 = Date.now()
+  console.log('[dashboard] start')
+
   const supabase = await createClient()
   const {
     data: { user },
   } = await supabase.auth.getUser()
+  console.log('[dashboard] auth', Date.now() - t0, 'ms')
   if (!user) redirect('/login')
 
   const now = new Date()
@@ -30,6 +34,7 @@ export default async function DashboardPage() {
     getDashboardBudgetLines(currentMonthStart, currentMonthEnd),
     getMonthlyPnlData(),
   ])
+  console.log('[dashboard] queries', Date.now() - t0, 'ms')
 
   // Group last 2 snapshots per account
   const snapshotsByAccount = new Map<string, typeof raw.recentSnapshots>()
