@@ -17,7 +17,8 @@ type SearchParams = Promise<{ year?: string; month?: string }>
 
 export default async function GastosPage({ searchParams }: { searchParams: SearchParams }) {
   const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const { data: { session } } = await supabase.auth.getSession()
+  const user = session?.user ?? null
   if (!user) redirect('/login')
 
   const params = await searchParams

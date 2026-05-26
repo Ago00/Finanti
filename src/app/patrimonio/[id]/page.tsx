@@ -28,7 +28,8 @@ export default async function AccountDetailPage({
   params: Promise<{ id: string }>
 }) {
   const supabase = await createClient()
-  const { data: { user } } = await supabase.auth.getUser()
+  const { data: { session } } = await supabase.auth.getSession()
+  const user = session?.user ?? null
   if (!user) redirect('/login')
 
   const { id } = await params
