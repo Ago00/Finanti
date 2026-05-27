@@ -26,6 +26,9 @@ export async function proxy(request: NextRequest) {
   const { data: { session } } = await supabase.auth.getSession()
   const user = session?.user ?? null
 
+  const cookieNames = request.cookies.getAll().map(c => c.name)
+  console.log('[proxy]', request.nextUrl.pathname, 'user:', user?.email ?? 'none', 'cookies:', cookieNames.join(',') || 'NONE')
+
   const isLoginPage = request.nextUrl.pathname === '/login'
   const isAuthCallback = request.nextUrl.pathname.startsWith('/auth')
 
