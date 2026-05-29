@@ -37,15 +37,14 @@ export default async function GastosDetallePage({ searchParams }: { searchParams
   const groupId = params.groupId
   const prescindible = params.prescindible === 'true' ? true : undefined
 
-  const [txns, categories, groups] = await Promise.all([
-    listTransactionsByMonthFiltered(year, month, {
-      categoryId,
-      groupId,
-      prescindible,
-    }),
-    listCategories(),
-    listGroups(),
-  ])
+  // Sequential execution to avoid PgBouncer transaction-mode connection exhaustion
+  const txns = await listTransactionsByMonthFiltered(year, month, {
+    categoryId,
+    groupId,
+    prescindible,
+  })
+  const categories = await listCategories()
+  const groups = await listGroups()
 
   const total = sumTransactions(txns)
 

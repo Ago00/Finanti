@@ -20,11 +20,10 @@ export default async function DashboardPage() {
   const currentMonthStart = new Date(Date.UTC(currentYear, currentMonth - 1, 1))
   const currentMonthEnd = new Date(Date.UTC(currentYear, currentMonth, 1))
 
-  const [raw, budgetLines, monthlyPnl] = await Promise.all([
-    getDashboardRaw(),
-    getDashboardBudgetLines(currentMonthStart, currentMonthEnd),
-    getMonthlyPnlData(),
-  ])
+  // Sequential execution to avoid PgBouncer transaction-mode connection exhaustion
+  const raw = await getDashboardRaw()
+  const budgetLines = await getDashboardBudgetLines(currentMonthStart, currentMonthEnd)
+  const monthlyPnl = await getMonthlyPnlData()
 
   // Group last 2 snapshots per account
   const snapshotsByAccount = new Map<string, typeof raw.recentSnapshots>()

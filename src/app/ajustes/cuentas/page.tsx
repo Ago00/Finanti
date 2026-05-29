@@ -7,11 +7,10 @@ import Link from 'next/link'
 export default async function CuentasPage() {
   await requireUser()
 
-  const [accounts, accountTypes, assetClasses] = await Promise.all([
-    listAccounts(),
-    listAccountTypes(),
-    listAssetClasses(),
-  ])
+  // Sequential execution to avoid PgBouncer transaction-mode connection exhaustion
+  const accounts = await listAccounts()
+  const accountTypes = await listAccountTypes()
+  const assetClasses = await listAssetClasses()
 
   return (
     <div className="min-h-screen bg-[#0B0F1A] py-12 px-6">

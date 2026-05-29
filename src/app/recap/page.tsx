@@ -25,10 +25,9 @@ export default async function RecapPage({ searchParams }: { searchParams: Search
 
   const monthDate = new Date(Date.UTC(year, month - 1, 1))
 
-  const [prefill, existingSnapshots] = await Promise.all([
-    getRecapPrefill(monthDate),
-    getExistingSnapshotsForMonth(monthDate),
-  ])
+  // Sequential execution to avoid PgBouncer transaction-mode connection exhaustion
+  const prefill = await getRecapPrefill(monthDate)
+  const existingSnapshots = await getExistingSnapshotsForMonth(monthDate)
 
   const prevMonth = month === 1 ? 12 : month - 1
   const prevYear = month === 1 ? year - 1 : year

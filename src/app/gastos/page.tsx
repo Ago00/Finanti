@@ -24,14 +24,13 @@ export default async function GastosPage({ searchParams }: { searchParams: Searc
     ? parsed.data
     : { year: now.getUTCFullYear(), month: now.getUTCMonth() + 1 }
 
-  const [txns, categories, groups, categoryTotals, monthlyTotals, budgetTotal] = await Promise.all([
-    listTransactionsByMonth(year, month),
-    listCategories(),
-    listGroups(),
-    listCategoryTotals(year, month),
-    listMonthlyExpenseTotals(),
-    getBudgetTotalForMonth(year, month),
-  ])
+  // Sequential execution to avoid PgBouncer transaction-mode connection exhaustion
+  const txns = await listTransactionsByMonth(year, month)
+  const categories = await listCategories()
+  const groups = await listGroups()
+  const categoryTotals = await listCategoryTotals(year, month)
+  const monthlyTotals = await listMonthlyExpenseTotals()
+  const budgetTotal = await getBudgetTotalForMonth(year, month)
 
   const total = sumTransactions(txns)
 

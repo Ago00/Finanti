@@ -15,10 +15,9 @@ export default async function IngresosPage({ searchParams }: { searchParams: Sea
   const year = parseInt(params.year ?? '') || now.getUTCFullYear()
   const month = parseInt(params.month ?? '') || (now.getUTCMonth() + 1)
 
-  const [entries, incomeSources] = await Promise.all([
-    listIncomesByBudgetMonth(year, month),
-    listIncomeSources(),
-  ])
+  // Sequential execution to avoid PgBouncer transaction-mode connection exhaustion
+  const entries = await listIncomesByBudgetMonth(year, month)
+  const incomeSources = await listIncomeSources()
 
   const prevMonth = month === 1 ? 12 : month - 1
   const prevYear  = month === 1 ? year - 1 : year

@@ -9,10 +9,9 @@ import { formatCurrency } from '@/lib/formatting'
 export default async function PatrimonioPage() {
   await requireUser()
 
-  const [accounts, rawSnapshots] = await Promise.all([
-    listAccounts(),
-    listAllSnapshotsByMonth(),
-  ])
+  // Sequential execution to avoid PgBouncer transaction-mode connection exhaustion
+  const accounts = await listAccounts()
+  const rawSnapshots = await listAllSnapshotsByMonth()
 
   const now = new Date()
   const recapYear = now.getUTCFullYear()
