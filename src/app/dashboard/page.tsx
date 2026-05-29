@@ -1,5 +1,4 @@
-import { redirect } from 'next/navigation'
-import { createClient } from '@/lib/supabase/server'
+import { requireUser } from '@/lib/auth'
 import { getDashboardRaw, getDashboardBudgetLines, getMonthlyPnlData } from '@/features/dashboard/queries'
 import {
   computeAccountSummary,
@@ -13,10 +12,7 @@ import { BudgetSummaryWidget } from '@/features/dashboard/components/budget-summ
 import { formatMonthLabel } from '@/lib/dates'
 
 export default async function DashboardPage() {
-  const supabase = await createClient()
-  const { data: { session } } = await supabase.auth.getSession()
-  const user = session?.user ?? null
-  if (!user) redirect('/login')
+  await requireUser()
 
   const now = new Date()
   const currentYear = now.getUTCFullYear()

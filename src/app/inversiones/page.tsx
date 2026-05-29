@@ -1,11 +1,7 @@
-import { redirect } from 'next/navigation'
-import { createClient } from '@/lib/supabase/server'
+import { requireUser } from '@/lib/auth'
 
 export default async function InversionesPage() {
-  const supabase = await createClient()
-  const { data: { session } } = await supabase.auth.getSession()
-  const user = session?.user ?? null
-  if (!user) redirect('/login')
+  await requireUser()
 
   return (
     <div className="min-h-screen bg-[#0B0F1A] py-8 px-4 pb-24">

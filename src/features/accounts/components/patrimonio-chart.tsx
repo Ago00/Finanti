@@ -1,6 +1,7 @@
 'use client'
 
 import { useState } from 'react'
+import { formatCurrency } from '@/lib/formatting'
 
 type AccountValue = {
   id: string
@@ -15,10 +16,6 @@ type MonthData = {
 }
 
 type Props = { data: MonthData[] }
-
-function formatCurrency(value: number) {
-  return new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(value)
-}
 
 function formatAxisValue(value: number): string {
   if (Math.abs(value) >= 1000) return `${(value / 1000).toFixed(0)}k`

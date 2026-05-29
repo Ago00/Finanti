@@ -1,13 +1,9 @@
 import { listCategories } from '@/features/categories/queries'
 import { CategoriesSettings } from '@/features/categories/components/categories-settings'
-import { redirect } from 'next/navigation'
-import { createClient } from '@/lib/supabase/server'
+import { requireUser } from '@/lib/auth'
 
 export default async function CategoriasPage() {
-  const supabase = await createClient()
-  const { data: { session } } = await supabase.auth.getSession()
-  const user = session?.user ?? null
-  if (!user) redirect('/login')
+  await requireUser()
 
   const categories = await listCategories()
 

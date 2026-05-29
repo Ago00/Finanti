@@ -36,64 +36,59 @@ export async function getMonthlyBudgetData(monthDate: Date): Promise<MonthlyBudg
   const monthStart = new Date(Date.UTC(monthDate.getUTCFullYear(), monthDate.getUTCMonth(), 1))
   const monthEnd = new Date(Date.UTC(monthDate.getUTCFullYear(), monthDate.getUTCMonth() + 1, 1))
 
-  const [incomeRows, budgetRows, txRows, snapRows] = await Promise.all([
-    // Query 1 — total income for the budget month
-    db
-      .select({ total: sum(incomes.amount) })
-      .from(incomes)
-      .where(and(gte(incomes.budgetMonth, monthStart), lt(incomes.budgetMonth, monthEnd))),
+  // Sequential execution to avoid PgBouncer transaction-mode connection exhaustion
+  const incomeRows = await db
+    .select({ total: sum(incomes.amount) })
+    .from(incomes)
+    .where(and(gte(incomes.budgetMonth, monthStart), lt(incomes.budgetMonth, monthEnd)))
 
-    // Query 2 — budget lines with category / assetClass labels
-    db
-      .select({
-        categoryId: budgets.categoryId,
-        categoryName: categories.name,
-        categoryColor: categories.color,
-        assetClassId: budgets.assetClassId,
-        assetClassName: assetClasses.name,
-        assetClassColor: assetClasses.color,
-        plannedAmount: budgets.plannedAmount,
-        month: budgets.month,
-      })
-      .from(budgets)
-      .leftJoin(categories, eq(budgets.categoryId, categories.id))
-      .leftJoin(assetClasses, eq(budgets.assetClassId, assetClasses.id))
-      .where(and(gte(budgets.month, monthStart), lt(budgets.month, monthEnd))),
+  const budgetRows = await db
+    .select({
+      categoryId: budgets.categoryId,
+      categoryName: categories.name,
+      categoryColor: categories.color,
+      assetClassId: budgets.assetClassId,
+      assetClassName: assetClasses.name,
+      assetClassColor: assetClasses.color,
+      plannedAmount: budgets.plannedAmount,
+      month: budgets.month,
+    })
+    .from(budgets)
+    .leftJoin(categories, eq(budgets.categoryId, categories.id))
+    .leftJoin(assetClasses, eq(budgets.assetClassId, assetClasses.id))
+    .where(and(gte(budgets.month, monthStart), lt(budgets.month, monthEnd)))
 
-    // Query 3 — actual spending grouped by category
-    db
-      .select({
-        categoryId: transactions.categoryId,
-        total: sum(transactions.amount),
-      })
-      .from(transactions)
-      .where(
-        and(
-          gte(transactions.paidAt, monthStart),
-          lt(transactions.paidAt, monthEnd),
-          isNull(transactions.archivedAt),
-        ),
-      )
-      .groupBy(transactions.categoryId),
+  const txRows = await db
+    .select({
+      categoryId: transactions.categoryId,
+      total: sum(transactions.amount),
+    })
+    .from(transactions)
+    .where(
+      and(
+        gte(transactions.paidAt, monthStart),
+        lt(transactions.paidAt, monthEnd),
+        isNull(transactions.archivedAt),
+      ),
+    )
+    .groupBy(transactions.categoryId)
 
-    // Query 4 — contributions grouped by assetClass
-    db
-      .select({
-        assetClassId: accounts.assetClassId,
-        totalContributions: sum(monthlySnapshots.contributions),
-      })
-      .from(monthlySnapshots)
-      .innerJoin(accounts, eq(monthlySnapshots.accountId, accounts.id))
-      .where(
-        and(
-          gte(monthlySnapshots.month, monthStart),
-          lt(monthlySnapshots.month, monthEnd),
-          isNull(monthlySnapshots.archivedAt),
-          isNull(accounts.archivedAt),
-        ),
-      )
-      .groupBy(accounts.assetClassId),
-  ])
+  const snapRows = await db
+    .select({
+      assetClassId: accounts.assetClassId,
+      totalContributions: sum(monthlySnapshots.contributions),
+    })
+    .from(monthlySnapshots)
+    .innerJoin(accounts, eq(monthlySnapshots.accountId, accounts.id))
+    .where(
+      and(
+        gte(monthlySnapshots.month, monthStart),
+        lt(monthlySnapshots.month, monthEnd),
+        isNull(monthlySnapshots.archivedAt),
+        isNull(accounts.archivedAt),
+      ),
+    )
+    .groupBy(accounts.assetClassId)
 
   const totalIncome = Number(incomeRows[0]?.total ?? 0)
 

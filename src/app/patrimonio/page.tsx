@@ -3,18 +3,11 @@ import { PatrimonioChart } from '@/features/accounts/components/patrimonio-chart
 import { formatMonthLabel } from '@/lib/dates'
 import { CalendarCheck } from 'lucide-react'
 import Link from 'next/link'
-import { createClient } from '@/lib/supabase/server'
-import { redirect } from 'next/navigation'
-
-function formatCurrency(value: number) {
-  return new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(value)
-}
+import { requireUser } from '@/lib/auth'
+import { formatCurrency } from '@/lib/formatting'
 
 export default async function PatrimonioPage() {
-  const supabase = await createClient()
-  const { data: { session } } = await supabase.auth.getSession()
-  const user = session?.user ?? null
-  if (!user) redirect('/login')
+  await requireUser()
 
   const [accounts, rawSnapshots] = await Promise.all([
     listAccounts(),

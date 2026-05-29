@@ -1,13 +1,9 @@
 import { listAssetClasses } from '@/features/asset-classes/queries'
 import { AssetClassesSettings } from '@/features/asset-classes/components/asset-classes-settings'
-import { redirect } from 'next/navigation'
-import { createClient } from '@/lib/supabase/server'
+import { requireUser } from '@/lib/auth'
 
 export default async function ClasesActivoPage() {
-  const supabase = await createClient()
-  const { data: { session } } = await supabase.auth.getSession()
-  const user = session?.user ?? null
-  if (!user) redirect('/login')
+  await requireUser()
 
   const classes = await listAssetClasses()
 

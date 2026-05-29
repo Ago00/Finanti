@@ -1,6 +1,6 @@
 import { db } from '@/lib/db'
 import { transactions, categories, groups, budgets } from '@/db/schema'
-import { and, gte, lt, isNull, desc, eq, sum } from 'drizzle-orm'
+import { and, gte, lt, isNull, desc, eq, sum, sql } from 'drizzle-orm'
 
 export type TransactionWithRefs = {
   id: string
@@ -82,26 +82,19 @@ export async function listCategoryTotals(year: number, month: number): Promise<C
     .select({
       categoryId: transactions.categoryId,
       categoryName: categories.name,
-      amount: transactions.amount,
+      total: sum(transactions.amount),
     })
     .from(transactions)
     .leftJoin(categories, eq(transactions.categoryId, categories.id))
     .where(and(gte(transactions.paidAt, from), lt(transactions.paidAt, to), isNull(transactions.archivedAt)))
+    .groupBy(transactions.categoryId, categories.name)
+    .orderBy(desc(sum(transactions.amount)))
 
-  const map = new Map<string | null, { categoryId: string | null; categoryName: string | null; total: number }>()
-
-  for (const r of rows) {
-    const key = r.categoryId ?? null
-    const existing = map.get(key)
-    const amount = Number(r.amount)
-    if (existing) {
-      existing.total += amount
-    } else {
-      map.set(key, { categoryId: key, categoryName: r.categoryName ?? null, total: amount })
-    }
-  }
-
-  return Array.from(map.values()).sort((a, b) => b.total - a.total)
+  return rows.map(r => ({
+    categoryId: r.categoryId ?? null,
+    categoryName: r.categoryName ?? null,
+    total: Number(r.total ?? 0),
+  }))
 }
 
 export type MonthlyExpenseTotal = {
@@ -112,23 +105,18 @@ export type MonthlyExpenseTotal = {
 export async function listMonthlyExpenseTotals(): Promise<MonthlyExpenseTotal[]> {
   const rows = await db
     .select({
-      paidAt: transactions.paidAt,
-      amount: transactions.amount,
+      month: sql<string>`TO_CHAR(DATE_TRUNC('month', ${transactions.paidAt}), 'YYYY-MM')`,
+      total: sum(transactions.amount),
     })
     .from(transactions)
     .where(isNull(transactions.archivedAt))
+    .groupBy(sql`DATE_TRUNC('month', ${transactions.paidAt})`)
+    .orderBy(sql`DATE_TRUNC('month', ${transactions.paidAt})`)
 
-  const map = new Map<string, number>()
-
-  for (const r of rows) {
-    const d = r.paidAt
-    const key = `${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`
-    map.set(key, (map.get(key) ?? 0) + Number(r.amount))
-  }
-
-  return Array.from(map.entries())
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([month, total]) => ({ month, total }))
+  return rows.map(r => ({
+    month: r.month,
+    total: Number(r.total ?? 0),
+  }))
 }
 
 export async function getBudgetTotalForMonth(year: number, month: number): Promise<number> {

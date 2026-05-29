@@ -7,12 +7,7 @@ import { es } from 'date-fns/locale'
 import { sumIncomes, groupIncomesBySource } from '@/features/incomes/domain'
 import type { IncomeRow } from '@/features/incomes/queries'
 import { updateIncome, archiveIncome } from '@/features/incomes/actions'
-
-const fmt = new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' })
-
-function formatCurrency(n: number): string {
-  return fmt.format(n)
-}
+import { formatCurrency } from '@/lib/formatting'
 
 type IncomeSource = { id: string; name: string }
 

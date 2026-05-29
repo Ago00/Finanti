@@ -1,13 +1,10 @@
 import { getAccountWithHistory } from '@/features/accounts/queries'
 import { GAIN_MODE_LABELS } from '@/features/accounts/domain'
-import { notFound, redirect } from 'next/navigation'
+import { notFound } from 'next/navigation'
 import { z } from 'zod'
 import Link from 'next/link'
-import { createClient } from '@/lib/supabase/server'
-
-function formatCurrency(value: number) {
-  return new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(value)
-}
+import { requireUser } from '@/lib/auth'
+import { formatCurrency } from '@/lib/formatting'
 
 function formatPercent(value: number) {
   const sign = value > 0 ? '+' : ''
@@ -27,10 +24,7 @@ export default async function AccountDetailPage({
 }: {
   params: Promise<{ id: string }>
 }) {
-  const supabase = await createClient()
-  const { data: { session } } = await supabase.auth.getSession()
-  const user = session?.user ?? null
-  if (!user) redirect('/login')
+  await requireUser()
 
   const { id } = await params
   const parsed = z.string().uuid().safeParse(id)

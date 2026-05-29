@@ -1,13 +1,9 @@
 import { listIncomeSources } from '@/features/income-sources/queries'
 import { IncomeSourcesSettings } from '@/features/income-sources/components/income-sources-settings'
-import { redirect } from 'next/navigation'
-import { createClient } from '@/lib/supabase/server'
+import { requireUser } from '@/lib/auth'
 
 export default async function FuentesIngresoPage() {
-  const supabase = await createClient()
-  const { data: { session } } = await supabase.auth.getSession()
-  const user = session?.user ?? null
-  if (!user) redirect('/login')
+  await requireUser()
 
   const sources = await listIncomeSources()
 

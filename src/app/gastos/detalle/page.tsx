@@ -1,6 +1,5 @@
-import { redirect } from 'next/navigation'
 import Link from 'next/link'
-import { createClient } from '@/lib/supabase/server'
+import { requireUser } from '@/lib/auth'
 import {
   listTransactionsByMonthFiltered,
   listCategories,
@@ -11,10 +10,7 @@ import { TransactionList } from '@/features/transactions/components/transaction-
 import { TransactionFilters } from '@/features/transactions/components/transaction-filters'
 import { MonthFilterSchema } from '@/features/transactions/schemas'
 import { formatMonthLabel } from '@/lib/dates'
-
-function formatCurrency(value: number) {
-  return new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(value)
-}
+import { formatCurrency } from '@/lib/formatting'
 
 type SearchParams = Promise<{
   year?: string
@@ -25,10 +21,7 @@ type SearchParams = Promise<{
 }>
 
 export default async function GastosDetallePage({ searchParams }: { searchParams: SearchParams }) {
-  const supabase = await createClient()
-  const { data: { session } } = await supabase.auth.getSession()
-  const user = session?.user ?? null
-  if (!user) redirect('/login')
+  await requireUser()
 
   const params = await searchParams
   const now = new Date()

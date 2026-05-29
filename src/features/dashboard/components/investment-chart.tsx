@@ -2,12 +2,9 @@
 
 import { useState } from 'react'
 import type { InvestmentEvolutionPoint } from '@/features/dashboard/domain'
+import { formatCurrency } from '@/lib/formatting'
 
 type Props = { data: InvestmentEvolutionPoint[] }
-
-function formatCurrency(value: number): string {
-  return new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(value)
-}
 
 export function InvestmentChart({ data }: Props) {
   const [tooltipIdx, setTooltipIdx] = useState<number | null>(null)

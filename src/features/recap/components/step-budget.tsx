@@ -1,5 +1,7 @@
 'use client'
 
+import { formatCurrency } from '@/lib/formatting'
+
 type CategoryOption = { id: string; name: string }
 type AssetClassOption = { id: string; name: string }
 
@@ -8,10 +10,6 @@ type Props = {
   assetClasses: AssetClassOption[]
   inputs: import('../domain').RecapBudgetInput[]
   onChange: (updated: import('../domain').RecapBudgetInput[]) => void
-}
-
-function formatCurrency(value: number): string {
-  return new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(value)
 }
 
 export function StepBudget({ categories, assetClasses, inputs, onChange }: Props) {

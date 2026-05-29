@@ -1,9 +1,6 @@
 import type { BudgetAnalysis, BudgetLine } from '@/features/budget/domain'
 import { BudgetLineEdit } from './budget-line-edit'
-
-function formatCurrency(n: number) {
-  return new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(n)
-}
+import { formatCurrency } from '@/lib/formatting'
 
 function BudgetLineRow({ line }: { line: BudgetLine }) {
   return (

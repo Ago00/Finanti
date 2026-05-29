@@ -5,10 +5,7 @@ import type { ReactNode } from 'react'
 import Link from 'next/link'
 import type { DashboardSummary, EvolutionPoint } from '@/features/dashboard/domain'
 import { ResumenMensualChart } from '@/features/dashboard/components/resumen-mensual-chart'
-
-function formatCurrency(value: number): string {
-  return new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(value)
-}
+import { formatCurrency } from '@/lib/formatting'
 
 
 // ── SVG line chart (no external library needed) ────────────────────────────

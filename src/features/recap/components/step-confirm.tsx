@@ -1,5 +1,6 @@
 import type { RecapAccountInput, RecapIncomeInput, RecapMovementInput, RecapBudgetInput } from '../domain'
 import { computeSnapshot, computeRecapSummary } from '../domain'
+import { formatCurrency } from '@/lib/formatting'
 
 type AccountMeta = { id: string; name: string }
 type IncomeMeta = { id: string; name: string }
@@ -13,10 +14,6 @@ type Props = {
   incomeMeta: IncomeMeta[]
   categoryMeta: { id: string; name: string }[]
   assetClassMeta: { id: string; name: string }[]
-}
-
-function formatCurrency(value: number): string {
-  return new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(value)
 }
 
 function formatPercent(value: number): string {

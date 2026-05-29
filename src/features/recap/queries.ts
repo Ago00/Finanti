@@ -1,6 +1,6 @@
 import { db } from '@/lib/db'
 import { accounts, incomeSources, categories, assetClasses, monthlySnapshots } from '@/db/schema'
-import { isNull, asc, lt, eq, desc } from 'drizzle-orm'
+import { isNull, asc, lt, eq, sql } from 'drizzle-orm'
 
 export type RecapAccountPrefill = {
   id: string
@@ -43,40 +43,40 @@ export type ExistingSnapshots = {
 }[]
 
 export async function getRecapPrefill(month: Date): Promise<RecapPrefillData> {
-  const [allAccounts, allIncomeSources, allCategories, allAssetClasses, priorSnapshots] =
-    await Promise.all([
-      db
-        .select({ id: accounts.id, name: accounts.name, gainMode: accounts.gainMode, color: accounts.color, sortOrder: accounts.sortOrder })
-        .from(accounts)
-        .where(isNull(accounts.archivedAt))
-        .orderBy(asc(accounts.sortOrder)),
-      db
-        .select({ id: incomeSources.id, name: incomeSources.name, color: incomeSources.color })
-        .from(incomeSources)
-        .where(isNull(incomeSources.archivedAt))
-        .orderBy(asc(incomeSources.sortOrder)),
-      db
-        .select({ id: categories.id, name: categories.name })
-        .from(categories)
-        .where(isNull(categories.archivedAt))
-        .orderBy(asc(categories.name)),
-      db
-        .select({ id: assetClasses.id, name: assetClasses.name })
-        .from(assetClasses)
-        .where(isNull(assetClasses.archivedAt))
-        .orderBy(asc(assetClasses.name)),
-      db
-        .select({ accountId: monthlySnapshots.accountId, closingBalance: monthlySnapshots.closingBalance })
-        .from(monthlySnapshots)
-        .where(lt(monthlySnapshots.month, month))
-        .orderBy(desc(monthlySnapshots.month)),
-    ])
+  // Sequential execution to avoid PgBouncer transaction-mode connection exhaustion
+  const allAccounts = await db
+    .select({ id: accounts.id, name: accounts.name, gainMode: accounts.gainMode, color: accounts.color, sortOrder: accounts.sortOrder })
+    .from(accounts)
+    .where(isNull(accounts.archivedAt))
+    .orderBy(asc(accounts.sortOrder))
+
+  const allIncomeSources = await db
+    .select({ id: incomeSources.id, name: incomeSources.name, color: incomeSources.color })
+    .from(incomeSources)
+    .where(isNull(incomeSources.archivedAt))
+    .orderBy(asc(incomeSources.sortOrder))
+
+  const allCategories = await db
+    .select({ id: categories.id, name: categories.name })
+    .from(categories)
+    .where(isNull(categories.archivedAt))
+    .orderBy(asc(categories.name))
+
+  const allAssetClasses = await db
+    .select({ id: assetClasses.id, name: assetClasses.name })
+    .from(assetClasses)
+    .where(isNull(assetClasses.archivedAt))
+    .orderBy(asc(assetClasses.name))
+
+  // Use DISTINCT ON to fetch only the most recent snapshot per account before the given month,
+  // avoiding loading all historical snapshots into memory.
+  const priorSnapshots = await db.execute<{ account_id: string; closing_balance: string }>(
+    sql`SELECT DISTINCT ON (account_id) account_id, closing_balance FROM monthly_snapshots WHERE month < ${month} ORDER BY account_id, month DESC`
+  )
 
   const latestPriorByAccount = new Map<string, number>()
   for (const snap of priorSnapshots) {
-    if (!latestPriorByAccount.has(snap.accountId)) {
-      latestPriorByAccount.set(snap.accountId, Number(snap.closingBalance))
-    }
+    latestPriorByAccount.set(snap.account_id, Number(snap.closing_balance))
   }
 
   return {

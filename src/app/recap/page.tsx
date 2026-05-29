@@ -1,6 +1,5 @@
 import Link from 'next/link'
-import { redirect } from 'next/navigation'
-import { createClient } from '@/lib/supabase/server'
+import { requireUser } from '@/lib/auth'
 import { getRecapPrefill, getExistingSnapshotsForMonth } from '@/features/recap/queries'
 import { RecapWizard } from '@/features/recap/components/recap-wizard'
 import { formatMonthLabel } from '@/lib/dates'
@@ -8,10 +7,7 @@ import { formatMonthLabel } from '@/lib/dates'
 type SearchParams = Promise<{ year?: string; month?: string }>
 
 export default async function RecapPage({ searchParams }: { searchParams: SearchParams }) {
-  const supabase = await createClient()
-  const { data: { session } } = await supabase.auth.getSession()
-  const user = session?.user ?? null
-  if (!user) redirect('/login')
+  await requireUser()
 
   const params = await searchParams
 

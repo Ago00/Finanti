@@ -1,6 +1,5 @@
-import { redirect } from 'next/navigation'
 import Link from 'next/link'
-import { createClient } from '@/lib/supabase/server'
+import { requireUser } from '@/lib/auth'
 import { getMonthlyBudgetData } from '@/features/budget/queries'
 import { computeBudgetAnalysis } from '@/features/budget/domain'
 import { BudgetView } from '@/features/budget/components/budget-view'
@@ -9,10 +8,7 @@ import { formatMonthLabel } from '@/lib/dates'
 type SearchParams = Promise<{ year?: string; month?: string }>
 
 export default async function PresupuestoPage({ searchParams }: { searchParams: SearchParams }) {
-  const supabase = await createClient()
-  const { data: { session } } = await supabase.auth.getSession()
-  const user = session?.user ?? null
-  if (!user) redirect('/login')
+  await requireUser()
 
   const params = await searchParams
   const now = new Date()

@@ -1,13 +1,9 @@
 import { listGroups } from '@/features/groups/queries'
 import { GroupsSettings } from '@/features/groups/components/groups-settings'
-import { redirect } from 'next/navigation'
-import { createClient } from '@/lib/supabase/server'
+import { requireUser } from '@/lib/auth'
 
 export default async function GruposPage() {
-  const supabase = await createClient()
-  const { data: { session } } = await supabase.auth.getSession()
-  const user = session?.user ?? null
-  if (!user) redirect('/login')
+  await requireUser()
 
   const groups = await listGroups()
 

@@ -1,14 +1,11 @@
 'use client'
 
 import type { RecapAccountInput } from '../domain'
+import { formatCurrency } from '@/lib/formatting'
 
 type Props = {
   accounts: RecapAccountInput[]
   onChange: (updated: RecapAccountInput[]) => void
-}
-
-function formatCurrency(n: number): string {
-  return new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(n)
 }
 
 const inputClass =

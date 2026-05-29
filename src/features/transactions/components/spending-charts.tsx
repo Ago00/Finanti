@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 import type { CategoryTotal, MonthlyExpenseTotal } from '@/features/transactions/queries'
+import { formatCurrency } from '@/lib/formatting'
 
 const BAR_COLORS = [
   '#6366F1',
@@ -14,9 +15,6 @@ const BAR_COLORS = [
   '#F97316',
 ]
 
-function formatCurrency(value: number): string {
-  return new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' }).format(value)
-}
 
 // ── Barras horizontales por categoría ─────────────────────────────────────────
 function CategoryBars({ totals }: { totals: CategoryTotal[] }) {

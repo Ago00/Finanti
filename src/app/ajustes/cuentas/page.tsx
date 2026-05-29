@@ -1,15 +1,11 @@
-import { redirect } from 'next/navigation'
-import { createClient } from '@/lib/supabase/server'
+import { requireUser } from '@/lib/auth'
 import { listAccounts, listAccountTypes } from '@/features/accounts/queries'
 import { listAssetClasses } from '@/features/asset-classes/queries'
 import { AccountsSettings } from '@/features/accounts/components/accounts-settings'
 import Link from 'next/link'
 
 export default async function CuentasPage() {
-  const supabase = await createClient()
-  const { data: { session } } = await supabase.auth.getSession()
-  const user = session?.user ?? null
-  if (!user) redirect('/login')
+  await requireUser()
 
   const [accounts, accountTypes, assetClasses] = await Promise.all([
     listAccounts(),
