@@ -10,7 +10,7 @@ declare global {
 const client =
   globalThis._pgClient ??
   postgres(process.env.DATABASE_URL!, {
-    max: 3,
+    max: 1,
     prepare: false,
     idle_timeout: 5,      // recycle before PgBouncer closes server-side
     max_lifetime: 60,     // force reconnect after 60s to prevent zombie connections
