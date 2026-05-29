@@ -71,7 +71,7 @@ export async function getRecapPrefill(month: Date): Promise<RecapPrefillData> {
   // Use DISTINCT ON to fetch only the most recent snapshot per account before the given month,
   // avoiding loading all historical snapshots into memory.
   const priorSnapshots = await db.execute<{ account_id: string; closing_balance: string }>(
-    sql`SELECT DISTINCT ON (account_id) account_id, closing_balance FROM monthly_snapshots WHERE month < ${month} ORDER BY account_id, month DESC`
+    sql`SELECT DISTINCT ON (account_id) account_id, closing_balance FROM monthly_snapshots WHERE month < ${month.toISOString()}::timestamptz ORDER BY account_id, month DESC`
   )
 
   const latestPriorByAccount = new Map<string, number>()
