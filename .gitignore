@@ -42,3 +42,9 @@ next-env.d.ts
 
 *.stackdump
 .vercel
+
+# Claude local (agent worktrees, local settings)
+.claude/
+
+# npm local config
+.npmrc
