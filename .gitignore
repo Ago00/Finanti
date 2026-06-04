@@ -48,3 +48,10 @@ next-env.d.ts
 
 # npm local config
 .npmrc
+
+# One-off scripts (debug, seed, migrate) — never commit; may contain credentials
+debug-*.mjs
+debug-*.ts
+scripts/
+migrate-*.mjs
+migrate-*.ts
