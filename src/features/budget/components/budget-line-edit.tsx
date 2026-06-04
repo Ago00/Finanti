@@ -3,6 +3,7 @@
 import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import { updateBudgetLine } from '@/features/budget/actions'
+import { formatCurrency } from '@/lib/formatting'
 
 type Props = {
   month: string // ISO datetime
@@ -33,8 +34,6 @@ export function BudgetLineEdit({ month, categoryId, assetClassId, currentPlanned
     if (e.key === 'Escape') { setEditing(false); setValue(String(currentPlanned)) }
   }
 
-  const fmt = new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' })
-
   if (editing) {
     return (
       <div className="flex items-center gap-1">
@@ -61,7 +60,7 @@ export function BudgetLineEdit({ month, categoryId, assetClassId, currentPlanned
       className="text-xs text-[#94A3B8] hover:text-white hover:underline"
       title="Click para editar"
     >
-      {fmt.format(currentPlanned)}
+      {formatCurrency(currentPlanned)}
     </button>
   )
 }

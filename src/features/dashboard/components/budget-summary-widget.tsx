@@ -3,10 +3,7 @@
 import { useState } from 'react'
 import Link from 'next/link'
 import type { DashboardBudgetAnalysis } from '@/features/dashboard/domain'
-
-function fmt(v: number) {
-  return new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(v)
-}
+import { formatCurrency } from '@/lib/formatting'
 
 function ProgressBar({ actual, planned }: { actual: number; planned: number }) {
   if (planned <= 0) return null
@@ -82,9 +79,9 @@ export function BudgetSummaryWidget({ analysis, referenceIncome, actualExpenses,
         <div className="grid grid-cols-[1fr_auto_auto] gap-x-4 items-center">
           <span className="text-xs font-semibold text-white">Gasto</span>
           <span className={`text-xs text-right font-semibold w-16 ${totalGastoReal > totalGastoPlanned ? 'text-red-400' : 'text-white'}`}>
-            {fmt(totalGastoReal)}
+            {formatCurrency(totalGastoReal)}
           </span>
-          <span className="text-xs text-right text-[#94A3B8] w-16">{fmt(totalGastoPlanned)}</span>
+          <span className="text-xs text-right text-[#94A3B8] w-16">{formatCurrency(totalGastoPlanned)}</span>
         </div>
         <ProgressBar actual={totalGastoReal} planned={totalGastoPlanned} />
       </div>
@@ -99,8 +96,8 @@ export function BudgetSummaryWidget({ analysis, referenceIncome, actualExpenses,
             Inversión
             <span className="text-[#475569] text-[10px]">{invExpanded ? '▾' : '▸'}</span>
           </span>
-          <span className="text-xs text-right text-white w-16">{totalInvActual > 0 ? fmt(totalInvActual) : '—'}</span>
-          <span className="text-xs text-right text-[#94A3B8] w-16">{totalInvPlanned > 0 ? fmt(totalInvPlanned) : '—'}</span>
+          <span className="text-xs text-right text-white w-16">{totalInvActual > 0 ? formatCurrency(totalInvActual) : '—'}</span>
+          <span className="text-xs text-right text-[#94A3B8] w-16">{totalInvPlanned > 0 ? formatCurrency(totalInvPlanned) : '—'}</span>
         </button>
 
         {invExpanded && (
@@ -111,8 +108,8 @@ export function BudgetSummaryWidget({ analysis, referenceIncome, actualExpenses,
                   <span className="w-1.5 h-1.5 rounded-full shrink-0" style={{ backgroundColor: line.color }} />
                   <span className="text-xs text-[#94A3B8] truncate">{line.label}</span>
                 </span>
-                <span className="text-xs text-right text-[#64748B] w-16">{line.actual > 0 ? fmt(line.actual) : '—'}</span>
-                <span className="text-xs text-right text-[#64748B] w-16">{fmt(line.planned)}</span>
+                <span className="text-xs text-right text-[#64748B] w-16">{line.actual > 0 ? formatCurrency(line.actual) : '—'}</span>
+                <span className="text-xs text-right text-[#64748B] w-16">{formatCurrency(line.planned)}</span>
               </div>
             ))}
             <Link
@@ -130,11 +127,11 @@ export function BudgetSummaryWidget({ analysis, referenceIncome, actualExpenses,
         <div className="grid grid-cols-[1fr_auto_auto] gap-x-4 items-center">
           <span className="text-xs font-semibold text-white">Ahorro</span>
           <span className="text-xs text-right font-semibold text-white w-16">
-            {fmt(ahorroReal)}
+            {formatCurrency(ahorroReal)}
           </span>
           {ahorroPlanned !== null && (
             <span className="text-xs text-right font-semibold text-[#94A3B8] w-16">
-              {fmt(ahorroPlanned)}
+              {formatCurrency(ahorroPlanned)}
             </span>
           )}
         </div>

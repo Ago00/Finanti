@@ -2,12 +2,9 @@
 
 import { useState } from 'react'
 import type { MonthlyPnlPoint } from '@/features/dashboard/domain'
+import { formatCurrency, formatDelta } from '@/lib/formatting'
 
 type Props = { data: MonthlyPnlPoint[] }
-
-function fmt(v: number) {
-  return new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR', maximumFractionDigits: 0 }).format(v)
-}
 
 function fmtAxis(v: number) {
   if (Math.abs(v) >= 1000) return `${(v / 1000).toFixed(0)}k`
@@ -207,26 +204,26 @@ export function ResumenMensualChart({ data }: Props) {
                 <span className="flex items-center gap-1.5 text-[#94A3B8]">
                   <span className="w-2 h-2 rounded-sm bg-emerald-500 shrink-0" />Ingresos
                 </span>
-                <span className="text-white font-medium">{fmt(d.income)}</span>
+                <span className="text-white font-medium">{formatCurrency(d.income)}</span>
               </div>
               <div className="flex justify-between gap-4">
                 <span className="flex items-center gap-1.5 text-[#94A3B8]">
                   <span className="w-2 h-2 rounded-sm bg-red-400 shrink-0" />Gastos
                 </span>
-                <span className="text-white font-medium">{fmt(d.expenses)}</span>
+                <span className="text-white font-medium">{formatCurrency(d.expenses)}</span>
               </div>
               <div className="flex justify-between gap-4">
                 <span className="flex items-center gap-1.5 text-[#94A3B8]">
                   <span className="w-2 h-2 rounded-sm bg-[#6366F1] shrink-0" />Inv.
                 </span>
                 <span className="font-medium text-[#6366F1]">
-                  {d.invGain >= 0 ? '+' : ''}{fmt(d.invGain)}
+                  {formatDelta(d.invGain)}
                 </span>
               </div>
               <div className="border-t border-[#1E2A3A] pt-1 flex justify-between gap-4">
                 <span className="text-[#94A3B8]">Resultado</span>
                 <span className={`font-semibold ${net >= 0 ? 'text-white' : 'text-orange-400'}`}>
-                  {net >= 0 ? '+' : ''}{fmt(net)}
+                  {formatDelta(net)}
                 </span>
               </div>
             </div>

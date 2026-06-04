@@ -91,8 +91,7 @@ function DetailTable({ head, rows }: { head: string[]; rows: DetailRow[] }) {
 }
 
 export function PatrimonioBreakdown({ groups }: Props) {
-  const firstExpandable = groups.flatMap(g => g.accounts).find(a => a.hasSnapshot)?.id ?? null
-  const [expanded, setExpanded] = useState<string | null>(firstExpandable)
+  const [expanded, setExpanded] = useState<string | null>(null)
 
   return (
     <div className="space-y-5">

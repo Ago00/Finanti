@@ -4,6 +4,7 @@ import { useState, useTransition } from 'react'
 import { useRouter } from 'next/navigation'
 import type { TransactionWithRefs } from '@/features/transactions/queries'
 import { updateTransaction, archiveTransaction } from '@/features/transactions/actions'
+import { formatCurrency } from '@/lib/formatting'
 
 type Props = {
   tx: TransactionWithRefs
@@ -16,10 +17,8 @@ function localDateTimeString(d: Date): string {
   return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`
 }
 
-const fmt = new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' })
-
 function formatAmount(amount: number): string {
-  return fmt.format(-Math.abs(amount))
+  return formatCurrency(-Math.abs(amount))
 }
 
 export function TransactionRow({ tx, categories, groups }: Props) {

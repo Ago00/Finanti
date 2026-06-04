@@ -3,11 +3,10 @@ import type { TransactionWithRefs } from '../queries'
 import { TransactionRow } from './transaction-row'
 import { format } from 'date-fns'
 import { es } from 'date-fns/locale'
-
-const fmt = new Intl.NumberFormat('es-ES', { style: 'currency', currency: 'EUR' })
+import { formatCurrency } from '@/lib/formatting'
 
 function formatAmount(amount: number): string {
-  return fmt.format(-Math.abs(amount))
+  return formatCurrency(-Math.abs(amount))
 }
 
 function capitalize(str: string): string {
