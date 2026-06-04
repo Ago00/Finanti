@@ -2,6 +2,9 @@
 
 import { useState } from 'react'
 import { formatCurrency } from '@/lib/formatting'
+import { SavingsLineChart } from '@/components/charts/savings-line-chart'
+import { StackedAreaChart } from '@/components/charts/stacked-area-chart'
+import { BarPairChart } from '@/components/charts/bar-pair-chart'
 
 const CARD = '#141925'
 const BORDER = '#1E2A3A'
@@ -21,6 +24,15 @@ type AccountDetail = {
   rows: DetailRow[]
 }
 
+// Numeric chart data per account kind. The breakdown picks the matching
+// mini-chart from the discriminant. `months` are 'YYYY-MM' oldest first and
+// every numeric array shares its length.
+export type AccountChartData =
+  | { kind: 'savings'; months: string[]; values: number[] }
+  | { kind: 'investment'; months: string[]; contributedCumulative: number[]; value: number[] }
+  | { kind: 'in-kind'; months: string[]; contribution: number[]; expense: number[] }
+  | { kind: 'none' }
+
 export type BreakdownAccount = {
   id: string
   name: string
@@ -28,6 +40,7 @@ export type BreakdownAccount = {
   currentBalance: number
   hasSnapshot: boolean
   detail: AccountDetail
+  chart: AccountChartData
 }
 
 export type BreakdownGroup = {
@@ -71,21 +84,71 @@ function DetailTable({ head, rows }: { head: string[]; rows: DetailRow[] }) {
           </tr>
         </thead>
         <tbody>
-          {rows.map((row, ri) => (
-            <tr key={ri} style={{ borderTop: `1px solid ${BORDER}` }}>
-              {row.map((cell, ci) => (
-                <td
-                  key={ci}
-                  className={`px-2.5 py-1.5 ${ci === 0 ? 'text-left' : 'text-right'}`}
-                  style={{ color: cell.color ?? (ci === 0 ? MUTED : '#fff') }}
-                >
-                  {cell.text}
-                </td>
-              ))}
-            </tr>
-          ))}
+          {rows.map(row => {
+            const rowKey = row[0]?.text ?? ''
+            return (
+              <tr key={rowKey} style={{ borderTop: `1px solid ${BORDER}` }}>
+                {row.map((cell, ci) => (
+                  <td
+                    key={head[ci] ?? ci}
+                    className={`px-2.5 py-1.5 ${ci === 0 ? 'text-left' : 'text-right'}`}
+                    style={{ color: cell.color ?? (ci === 0 ? MUTED : '#fff') }}
+                  >
+                    {cell.text}
+                  </td>
+                ))}
+              </tr>
+            )
+          })}
         </tbody>
       </table>
+    </div>
+  )
+}
+
+function LegendItem({ color, label }: { color: string; label: string }) {
+  return (
+    <span className="flex items-center gap-1.5 text-[10px]" style={{ color: MUTED }}>
+      <span className="w-2.5 h-2.5 rounded-sm inline-block" style={{ background: color }} />
+      {label}
+    </span>
+  )
+}
+
+function AccountMiniChart({ chart, color }: { chart: AccountChartData; color: string }) {
+  if (chart.kind === 'none' || chart.months.length < 2) return null
+
+  if (chart.kind === 'savings') {
+    return (
+      <div className="mt-3">
+        <SavingsLineChart labels={chart.months} values={chart.values} color={color} />
+      </div>
+    )
+  }
+
+  if (chart.kind === 'investment') {
+    return (
+      <div className="mt-3">
+        <StackedAreaChart
+          labels={chart.months}
+          contributed={chart.contributedCumulative}
+          value={chart.value}
+        />
+        <div className="flex gap-4 mt-1.5">
+          <LegendItem color="#10B981" label="Valor" />
+          <LegendItem color="#6366F1" label="Aportado" />
+        </div>
+      </div>
+    )
+  }
+
+  return (
+    <div className="mt-3">
+      <BarPairChart labels={chart.months} contribution={chart.contribution} expense={chart.expense} />
+      <div className="flex gap-4 mt-1">
+        <LegendItem color="#10B981" label="Aportación" />
+        <LegendItem color="#F59E0B" label="Gasto" />
+      </div>
     </div>
   )
 }
@@ -144,6 +207,7 @@ export function PatrimonioBreakdown({ groups }: Props) {
                                 <KpiCell key={kpi.label} kpi={kpi} />
                               ))}
                             </div>
+                            <AccountMiniChart chart={account.chart} color={account.color} />
                             {account.detail.rows.length > 0 && (
                               <DetailTable head={account.detail.head} rows={account.detail.rows} />
                             )}

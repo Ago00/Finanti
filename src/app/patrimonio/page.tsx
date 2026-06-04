@@ -15,10 +15,11 @@ import {
 } from '@/features/accounts/domain'
 import {
   PatrimonioBreakdown,
+  type AccountChartData,
   type BreakdownAccount,
   type BreakdownGroup,
 } from '@/features/accounts/components/patrimonio-breakdown'
-import { PatrimonioChart } from '@/features/accounts/components/patrimonio-chart'
+import { EvolutionChart, type EvolutionSeries } from '@/components/charts/evolution-chart'
 import { formatShortMonth, formatMonthLabel } from '@/lib/dates'
 import { formatCurrency, formatDelta, formatPercentDelta } from '@/lib/formatting'
 import { CalendarCheck } from 'lucide-react'
@@ -118,6 +119,44 @@ function buildDetail(kind: AccountKind, points: MonthlyPoint[]): BreakdownAccoun
   return buildSavingsDetail(points)
 }
 
+function buildChart(kind: AccountKind, points: MonthlyPoint[]): AccountChartData {
+  if (points.length === 0) return { kind: 'none' }
+  const months = points.map(point => point.month)
+
+  if (kind === 'investment') {
+    let runningContributed = 0
+    const contributedCumulative = points.map(point => {
+      runningContributed += point.contributions
+      return runningContributed
+    })
+    return {
+      kind: 'investment',
+      months,
+      contributedCumulative,
+      value: points.map(point => point.closingBalance),
+    }
+  }
+
+  if (kind === 'in-kind') {
+    return {
+      kind: 'in-kind',
+      months,
+      contribution: points.map(point => point.contributions),
+      expense: points.map(point => point.expense),
+    }
+  }
+
+  if (kind === 'savings') {
+    return {
+      kind: 'savings',
+      months,
+      values: points.map(point => point.closingBalance),
+    }
+  }
+
+  return { kind: 'none' }
+}
+
 export default async function PatrimonioPage() {
   await requireUser()
 
@@ -163,6 +202,7 @@ export default async function PatrimonioPage() {
       currentBalance: acc.latestSnapshot?.closingBalance ?? 0,
       hasSnapshot: acc.latestSnapshot !== null,
       detail: buildDetail(kind, points),
+      chart: buildChart(kind, points),
     }
     const list = accountsByKind.get(kind) ?? []
     list.push(breakdownAccount)
@@ -182,18 +222,28 @@ export default async function PatrimonioPage() {
     ]
   })
 
-  // Build MonthData[] for the summary chart.
-  const monthMap = new Map<string, { id: string; name: string; color: string; value: number }[]>()
+  // Build the summary chart series, one line per account, aligned to a shared
+  // sorted set of month labels. Missing months for an account read as 0,
+  // preserving the previous chart's behaviour.
+  const summaryMonths = Array.from(new Set(rawSnapshots.map(snap => snap.month))).sort((a, b) =>
+    a.localeCompare(b),
+  )
+  const snapshotByAccountMonth = new Map<string, number>()
+  const summaryAccountOrder: { id: string; name: string; color: string }[] = []
+  const seenSummaryAccounts = new Set<string>()
   for (const snap of rawSnapshots) {
-    const list = monthMap.get(snap.month) ?? []
-    if (!list.find(entry => entry.id === snap.accountId)) {
-      list.push({ id: snap.accountId, name: snap.accountName, color: snap.color, value: snap.closingBalance })
+    snapshotByAccountMonth.set(`${snap.accountId}|${snap.month}`, snap.closingBalance)
+    if (!seenSummaryAccounts.has(snap.accountId)) {
+      seenSummaryAccounts.add(snap.accountId)
+      summaryAccountOrder.push({ id: snap.accountId, name: snap.accountName, color: snap.color })
     }
-    monthMap.set(snap.month, list)
   }
-  const monthData = Array.from(monthMap.entries())
-    .sort(([a], [b]) => a.localeCompare(b))
-    .map(([month, accs]) => ({ month, accounts: accs }))
+  const summarySeries: EvolutionSeries[] = summaryAccountOrder.map(account => ({
+    id: account.id,
+    name: account.name,
+    color: account.color,
+    values: summaryMonths.map(month => snapshotByAccountMonth.get(`${account.id}|${month}`) ?? 0),
+  }))
 
   return (
     <div className="min-h-screen bg-[#0B0F1A] py-12 px-6 pb-24">
@@ -238,10 +288,9 @@ export default async function PatrimonioPage() {
           <PatrimonioBreakdown groups={groups} />
         )}
 
-        {monthData.length >= 2 ? (
+        {summaryMonths.length >= 2 ? (
           <div className="bg-[#141925] border border-[#1E2A3A] rounded-xl p-4">
-            <p className="text-xs text-[#94A3B8] mb-3">Evolución por cuenta</p>
-            <PatrimonioChart data={monthData} />
+            <EvolutionChart series={summarySeries} labels={summaryMonths} />
           </div>
         ) : accounts.length > 0 ? (
           <div className="bg-[#141925] border border-[#1E2A3A] rounded-xl p-6 text-center">
