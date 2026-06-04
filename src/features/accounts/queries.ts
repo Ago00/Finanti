@@ -1,5 +1,5 @@
 import { db } from '@/lib/db'
-import { accounts, accountTypes, monthlySnapshots } from '@/db/schema'
+import { accounts, accountTypes, monthlySnapshots, transactions } from '@/db/schema'
 import { eq, isNull, desc, and, asc } from 'drizzle-orm'
 import {
   calculateGain,
@@ -173,22 +173,72 @@ export async function listAllSnapshotsByMonth(): Promise<SnapshotByMonth[]> {
   }))
 }
 
-export async function getAccountWithHistory(accountId: string) {
-  const [account] = await db
-    .select()
-    .from(accounts)
-    .where(and(eq(accounts.id, accountId), isNull(accounts.archivedAt)))
-    .limit(1)
+export type AccountMonthlyHistory = {
+  accountId: string
+  month: string // 'YYYY-MM'
+  closingBalance: number
+  contributions: number
+}
 
-  if (!account) return null
+// Per-account monthly history (oldest month first), used to build the inline
+// detail of each account in the patrimonio breakdown.
+export async function listAccountMonthlyHistory(): Promise<AccountMonthlyHistory[]> {
+  function pad(n: number): string {
+    return n < 10 ? `0${n}` : `${n}`
+  }
 
-  const snaps = await db
-    .select()
+  const rows = await db
+    .select({
+      accountId: monthlySnapshots.accountId,
+      month: monthlySnapshots.month,
+      closingBalance: monthlySnapshots.closingBalance,
+      contributions: monthlySnapshots.contributions,
+    })
     .from(monthlySnapshots)
-    .where(and(eq(monthlySnapshots.accountId, accountId), isNull(monthlySnapshots.archivedAt)))
-    .orderBy(desc(monthlySnapshots.month))
+    .where(isNull(monthlySnapshots.archivedAt))
+    .orderBy(asc(monthlySnapshots.month))
 
-  const snapshots = snaps.map(raw => toSnapshot(raw, account.gainMode))
+  return rows.map(row => ({
+    accountId: row.accountId,
+    month: row.month.getUTCFullYear() + '-' + pad(row.month.getUTCMonth() + 1),
+    closingBalance: Number(row.closingBalance),
+    contributions: Number(row.contributions),
+  }))
+}
 
-  return { account, snapshots }
+export type ExpenseByAccountMonth = {
+  accountId: string
+  month: string // 'YYYY-MM'
+  expense: number
+}
+
+// Total expense per account and calendar month, derived from transactions tied
+// to an account. Accounts without transactions simply don't appear here, so the
+// caller must default their expense to 0.
+export async function listExpensesByAccountMonth(): Promise<ExpenseByAccountMonth[]> {
+  function pad(n: number): string {
+    return n < 10 ? `0${n}` : `${n}`
+  }
+
+  const rows = await db
+    .select({
+      accountId: transactions.accountId,
+      paidAt: transactions.paidAt,
+      amount: transactions.amount,
+    })
+    .from(transactions)
+    .where(isNull(transactions.archivedAt))
+
+  const totals = new Map<string, number>()
+  for (const row of rows) {
+    if (row.accountId === null) continue
+    const month = row.paidAt.getUTCFullYear() + '-' + pad(row.paidAt.getUTCMonth() + 1)
+    const key = `${row.accountId}|${month}`
+    totals.set(key, (totals.get(key) ?? 0) + Number(row.amount))
+  }
+
+  return Array.from(totals.entries()).map(([key, expense]) => {
+    const [accountId, month] = key.split('|')
+    return { accountId, month, expense }
+  })
 }

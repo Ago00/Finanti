@@ -116,7 +116,7 @@ export function BudgetSummaryWidget({ analysis, referenceIncome, actualExpenses,
               </div>
             ))}
             <Link
-              href="/inversiones"
+              href="/patrimonio"
               className="text-[11px] text-[#475569] hover:text-[#64748B] block pt-0.5"
             >
               ver detalle →

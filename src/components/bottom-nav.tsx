@@ -2,13 +2,12 @@
 
 import Link from 'next/link'
 import { usePathname } from 'next/navigation'
-import { Receipt, TrendingUp, CalendarCheck, Settings2, LayoutDashboard, BarChart3 } from 'lucide-react'
+import { Receipt, TrendingUp, CalendarCheck, Settings2, LayoutDashboard } from 'lucide-react'
 
 const items = [
   { label: 'Dashboard', href: '/dashboard', activePrefix: '/dashboard', icon: LayoutDashboard, iconOnly: false },
   { label: 'Gastos', href: '/gastos', activePrefix: '/gastos', icon: Receipt, iconOnly: false },
   { label: 'Patrimonio', href: '/patrimonio', activePrefix: '/patrimonio', icon: TrendingUp, iconOnly: false },
-  { label: 'Inversiones', href: '/inversiones', activePrefix: '/inversiones', icon: BarChart3, iconOnly: false },
   { label: 'Recap', href: '/recap', activePrefix: '/recap', icon: CalendarCheck, iconOnly: false },
   { label: 'Ajustes', href: '/ajustes/cuentas', activePrefix: '/ajustes', icon: Settings2, iconOnly: true },
 ]

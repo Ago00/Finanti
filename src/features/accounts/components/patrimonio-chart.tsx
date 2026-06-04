@@ -147,7 +147,7 @@ export function PatrimonioChart({ data }: Props) {
               points={polyline}
               fill="none"
               stroke={acc.color}
-              strokeWidth="2"
+              strokeWidth="1.3"
               strokeLinejoin="round"
               strokeLinecap="round"
             />
