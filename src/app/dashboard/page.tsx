@@ -21,10 +21,35 @@ export default async function DashboardPage() {
   const currentMonthEnd = new Date(Date.UTC(currentYear, currentMonth, 1))
 
   // Sequential execution to avoid PgBouncer transaction-mode connection exhaustion
-  const raw = await getDashboardRaw()
-  const budgetLines = await getDashboardBudgetLines(currentMonthStart, currentMonthEnd)
-  const monthlyPnl = await getMonthlyPnlData()
-  const monthlyContributions = await getMonthlyContributions()
+  // DEBUG: try/catch to expose stack trace in Vercel logs (remove after identifying the 500 cause)
+  let raw: Awaited<ReturnType<typeof getDashboardRaw>>
+  let budgetLines: Awaited<ReturnType<typeof getDashboardBudgetLines>>
+  let monthlyPnl: Awaited<ReturnType<typeof getMonthlyPnlData>>
+  let monthlyContributions: Awaited<ReturnType<typeof getMonthlyContributions>>
+  try {
+    raw = await getDashboardRaw()
+  } catch (err) {
+    console.error('[dashboard] getDashboardRaw failed:', err)
+    throw err
+  }
+  try {
+    budgetLines = await getDashboardBudgetLines(currentMonthStart, currentMonthEnd)
+  } catch (err) {
+    console.error('[dashboard] getDashboardBudgetLines failed:', err)
+    throw err
+  }
+  try {
+    monthlyPnl = await getMonthlyPnlData()
+  } catch (err) {
+    console.error('[dashboard] getMonthlyPnlData failed:', err)
+    throw err
+  }
+  try {
+    monthlyContributions = await getMonthlyContributions()
+  } catch (err) {
+    console.error('[dashboard] getMonthlyContributions failed:', err)
+    throw err
+  }
 
   // Group last 2 snapshots per account
   const snapshotsByAccount = new Map<string, typeof raw.recentSnapshots>()
