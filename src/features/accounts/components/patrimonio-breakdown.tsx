@@ -52,6 +52,7 @@ export type BreakdownGroup = {
 
 type Props = {
   groups: BreakdownGroup[]
+  prevTotalPatrimony: number
 }
 
 function KpiCell({ kpi }: { kpi: Kpi }) {
@@ -153,11 +154,29 @@ function AccountMiniChart({ chart, color }: { chart: AccountChartData; color: st
   )
 }
 
-export function PatrimonioBreakdown({ groups }: Props) {
+export function PatrimonioBreakdown({ groups, prevTotalPatrimony }: Props) {
   const [expanded, setExpanded] = useState<string | null>(null)
+
+  const totalNow = groups.reduce((s, g) => s + g.subtotal, 0)
+  const deltaTotal = prevTotalPatrimony > 0 ? totalNow - prevTotalPatrimony : null
+  const deltaTotalPct = prevTotalPatrimony > 0 ? ((totalNow - prevTotalPatrimony) / prevTotalPatrimony) * 100 : null
 
   return (
     <div className="space-y-5">
+      {/* Variation vs previous month */}
+      {deltaTotal !== null && deltaTotalPct !== null && (
+        <div className="flex items-center gap-2 px-1">
+          <span className="text-[11px]" style={{ color: FAINT }}>Variación mensual:</span>
+          <span
+            className="text-[11px] font-semibold"
+            style={{ color: deltaTotal >= 0 ? '#34D399' : '#F87171' }}
+          >
+            {deltaTotal >= 0 ? '+' : ''}{formatCurrency(deltaTotal)}
+            {' '}({deltaTotal >= 0 ? '+' : ''}{deltaTotalPct.toFixed(2)}%)
+          </span>
+        </div>
+      )}
+
       {groups.map(group => (
         <div key={group.key} className="space-y-2">
           <div className="flex items-center justify-between px-1">

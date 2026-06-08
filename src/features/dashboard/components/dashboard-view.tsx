@@ -1,135 +1,697 @@
 'use client'
 
-import { useState } from 'react'
-import type { ReactNode } from 'react'
+import { useState, useRef, useEffect, type ReactNode } from 'react'
 import Link from 'next/link'
-import type { DashboardSummary, EvolutionPoint } from '@/features/dashboard/domain'
-import { ResumenMensualChart } from '@/features/dashboard/components/resumen-mensual-chart'
-import { EvolutionChart, type EvolutionSeries } from '@/components/charts/evolution-chart'
+import { motion, AnimatePresence, useInView, useMotionValue, animate } from 'motion/react'
+import { ArrowUpRight, ArrowDownRight, ChevronRight, Wallet } from 'lucide-react'
+import type { DashboardSummary } from '@/features/dashboard/domain'
+import type { MonthlyContribution } from '@/features/dashboard/queries'
 import { formatCurrency } from '@/lib/formatting'
 
+// ─── Design tokens (aligned with mockup) ─────────────────────────────────────
+const C = {
+  bg:         '#07090F',
+  card:       '#111827',
+  border:     '#1F2937',
+  primary:    '#6366F1',
+  primaryLit: '#818CF8',
+  emerald:    '#10B981',
+  rose:       '#F43F5E',
+  amber:      '#F59E0B',
+  white:      '#F9FAFB',
+  muted:      '#6B7280',
+  faint:      '#374151',
+  text2:      '#9CA3AF',
+  glass:      'rgba(17,24,39,0.8)',
+}
 
-// ── Resumen mensual card with range selector ──────────────────────────────
-function ResumenMensualCard({ data }: { data: import('@/features/dashboard/domain').MonthlyPnlPoint[] }) {
-  const [range, setRange] = useState<'3m' | '6m' | '12m' | 'todo'>('12m')
-  const filtered = range === 'todo' ? data
-    : range === '12m' ? data.slice(-12)
-    : range === '6m' ? data.slice(-6)
-    : data.slice(-3)
+// ─── Animated counter ─────────────────────────────────────────────────────────
+function AnimatedNumber({
+  value, decimals = 2, duration = 1.2, color,
+}: {
+  value: number; decimals?: number; duration?: number; color?: string
+}) {
+  const ref = useRef<HTMLSpanElement>(null)
+  const inView = useInView(ref, { once: true, margin: '-10px' })
+  const motionVal = useMotionValue(0)
+
+  useEffect(() => {
+    if (!inView) return
+    const controls = animate(motionVal, value, {
+      duration,
+      ease: [0.16, 1, 0.3, 1],
+      onUpdate: v => {
+        if (ref.current) {
+          ref.current.textContent = new Intl.NumberFormat('es-ES', {
+            style: 'currency',
+            currency: 'EUR',
+            minimumFractionDigits: decimals,
+            maximumFractionDigits: decimals,
+          }).format(v)
+        }
+      },
+    })
+    return controls.stop
+  }, [inView, value, decimals, duration, motionVal])
+
+  return <span ref={ref} style={{ color }}>{formatCurrency(0)}</span>
+}
+
+// ─── Area chart: patrimonio evolution (valor + aportado) ──────────────────────
+type AreaPoint = { month: string; valor: number; aportado: number }
+
+function PatrimonioAreaChart({ data }: { data: AreaPoint[] }) {
+  const [hovered, setHovered] = useState<number | null>(null)
+  const W = 400, H = 120, padL = 45, padR = 16, padT = 12, padB = 24
+  const iW = W - padL - padR, iH = H - padT - padB
+
+  if (data.length < 2) return null
+
+  const vals = data.map(d => d.valor)
+  const aports = data.map(d => d.aportado)
+  const min = Math.min(...aports) * 0.97
+  const max = Math.max(...vals) * 1.02
+  const range = max - min || 1
+  const n = data.length
+  const toX = (i: number) => padL + (i / (n - 1)) * iW
+  const toY = (v: number) => padT + iH - ((v - min) / range) * iH
+
+  const valPts = data.map((d, i) => ({ x: toX(i), y: toY(d.valor) }))
+  const aortPts = data.map((d, i) => ({ x: toX(i), y: toY(d.aportado) }))
+
+  const lineVal = valPts.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ')
+  const lineAort = aortPts.map((p, i) => `${i === 0 ? 'M' : 'L'}${p.x.toFixed(1)},${p.y.toFixed(1)}`).join(' ')
+  const areaVal = `${lineVal}L${toX(n - 1)},${padT + iH}L${toX(0)},${padT + iH}Z`
+  const areaAort = `${lineAort}L${toX(n - 1)},${padT + iH}L${toX(0)},${padT + iH}Z`
+
+  const yTicks = [min, min + range * 0.5, max]
+  const labelStep = Math.max(1, Math.floor(n / 6))
 
   return (
-    <div className="bg-[#141925] border border-[#1E2A3A] rounded-xl p-4">
-      <div className="flex items-center justify-between mb-3">
-        <p className="text-xs text-[#94A3B8]">Resumen mensual</p>
-        <div className="flex gap-2">
-          {(['3m', '6m', '12m', 'todo'] as const).map(r => (
-            <button
-              key={r}
-              onClick={() => setRange(r)}
-              className={`text-xs px-2 py-0.5 rounded ${range === r ? 'bg-[#6366F1] text-white' : 'text-[#64748B] hover:text-white'}`}
-            >
-              {r}
-            </button>
+    <div className="relative w-full">
+      <svg
+        viewBox={`0 0 ${W} ${H}`}
+        className="w-full overflow-visible"
+        style={{ height: 'auto' }}
+        onMouseLeave={() => setHovered(null)}
+      >
+        <defs>
+          <linearGradient id="dvGradVal" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={C.primary} stopOpacity="0.3" />
+            <stop offset="100%" stopColor={C.primary} stopOpacity="0.02" />
+          </linearGradient>
+          <linearGradient id="dvGradAort" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor={C.emerald} stopOpacity="0.15" />
+            <stop offset="100%" stopColor={C.emerald} stopOpacity="0.01" />
+          </linearGradient>
+        </defs>
+
+        {yTicks.map((t, i) => (
+          <g key={i}>
+            <line x1={padL} y1={toY(t)} x2={W - padR} y2={toY(t)} stroke={C.border} strokeWidth={0.5} />
+            <text x={padL - 6} y={toY(t) + 3.5} textAnchor="end" fontSize={8} fill={C.muted}>
+              {t >= 1000 ? `${(t / 1000).toFixed(0)}k` : t.toFixed(0)}
+            </text>
+          </g>
+        ))}
+
+        <path d={areaAort} fill="url(#dvGradAort)" />
+        <path d={areaVal} fill="url(#dvGradVal)" />
+        <path d={lineAort} fill="none" stroke={C.emerald} strokeWidth={1.5} strokeLinecap="round" strokeDasharray="4 3" opacity={0.7} />
+        <path d={lineVal} fill="none" stroke={C.primary} strokeWidth={2} strokeLinecap="round" strokeLinejoin="round" />
+
+        {data.map((d, i) => {
+          const x = toX(i)
+          const colLeft = i === 0 ? padL : (toX(i - 1) + x) / 2
+          const colRight = i === n - 1 ? W - padR : (x + toX(i + 1)) / 2
+          return (
+            <rect
+              key={i} x={colLeft} y={padT} width={colRight - colLeft} height={iH}
+              fill="transparent"
+              onMouseEnter={() => setHovered(i)}
+            />
+          )
+        })}
+
+        {hovered !== null && (
+          <>
+            <line x1={toX(hovered)} y1={padT} x2={toX(hovered)} y2={padT + iH} stroke={C.border} strokeWidth={1} />
+            <circle cx={valPts[hovered].x} cy={valPts[hovered].y} r={4} fill={C.primary} stroke={C.bg} strokeWidth={2} />
+            <circle cx={aortPts[hovered].x} cy={aortPts[hovered].y} r={3} fill={C.emerald} stroke={C.bg} strokeWidth={2} />
+          </>
+        )}
+
+        {data.map((d, i) => (
+          i % labelStep === 0 || i === n - 1 ? (
+            <text key={d.month} x={toX(i)} y={H - 6} textAnchor="middle" fontSize={8} fill={C.muted}>
+              {d.month.slice(5)}
+            </text>
+          ) : null
+        ))}
+      </svg>
+
+      <AnimatePresence>
+        {hovered !== null && (
+          <motion.div
+            initial={{ opacity: 0, y: 4 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.12 }}
+            className="absolute pointer-events-none rounded-xl px-3 py-2 text-xs space-y-1"
+            style={{
+              background: C.glass,
+              border: `1px solid ${C.border}`,
+              backdropFilter: 'blur(12px)',
+              top: 8,
+              left: `calc(${((toX(hovered) - padL) / (W - padL - padR)) * 100}% + ${padL}px - 60px)`,
+              minWidth: 120,
+              boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
+            }}
+          >
+            <p style={{ color: C.text2 }} className="font-medium">{data[hovered].month}</p>
+            <div className="flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full" style={{ background: C.primary }} />
+              <span style={{ color: C.white }}>{formatCurrency(data[hovered].valor)}</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full" style={{ background: C.emerald }} />
+              <span style={{ color: C.text2 }}>Aportado: {formatCurrency(data[hovered].aportado)}</span>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  )
+}
+
+// ─── Bar chart: P&L (ingresos vs gastos) ─────────────────────────────────────
+type PnlPoint = { month: string; income: number; expenses: number }
+
+function PnlBarChart({ data }: { data: PnlPoint[] }) {
+  const [hovered, setHovered] = useState<number | null>(null)
+  const W = 360, H = 100, padL = 40, padR = 8, padT = 8, padB = 20
+  const iW = W - padL - padR, iH = H - padT - padB
+  const maxV = Math.max(...data.map(d => d.income), 1)
+  const n = data.length
+  const slot = iW / n
+  const bw = Math.min(10, slot / 3.5)
+
+  if (n === 0) return null
+
+  return (
+    <div className="relative w-full">
+      <svg
+        viewBox={`0 0 ${W} ${H}`}
+        className="w-full overflow-visible"
+        style={{ height: 'auto' }}
+        onMouseLeave={() => setHovered(null)}
+      >
+        {[0, 0.5, 1].map(t => (
+          <g key={t}>
+            <line x1={padL} y1={padT + iH * (1 - t)} x2={W - padR} y2={padT + iH * (1 - t)} stroke={C.border} strokeWidth={0.5} />
+            <text x={padL - 4} y={padT + iH * (1 - t) + 3} textAnchor="end" fontSize={8} fill={C.muted}>
+              {t === 0 ? '0' : t === 0.5 ? `${(maxV * 0.5 / 1000).toFixed(0)}k` : `${(maxV / 1000).toFixed(0)}k`}
+            </text>
+          </g>
+        ))}
+
+        {data.map((d, i) => {
+          const cx = padL + i * slot + slot / 2
+          const toH = (v: number) => (v / maxV) * iH
+          const base = padT + iH
+          const isHov = hovered === i
+          return (
+            <g key={d.month} onMouseEnter={() => setHovered(i)}>
+              <rect
+                x={cx - bw - 1} y={base - toH(d.income)} width={bw} height={toH(d.income)}
+                rx={2} fill={C.emerald} opacity={hovered === null || isHov ? 0.8 : 0.3}
+              />
+              <rect
+                x={cx + 1} y={base - toH(d.expenses)} width={bw} height={toH(d.expenses)}
+                rx={2} fill={C.rose} opacity={hovered === null || isHov ? 0.8 : 0.3}
+              />
+              <text x={cx} y={H - 5} textAnchor="middle" fontSize={8} fill={C.muted}>{d.month.slice(5)}</text>
+              <rect x={cx - slot / 2} y={padT} width={slot} height={iH} fill="transparent" />
+            </g>
+          )
+        })}
+
+        {hovered !== null && (
+          <line
+            x1={padL + hovered * slot + slot / 2} y1={padT}
+            x2={padL + hovered * slot + slot / 2} y2={padT + iH}
+            stroke={`${C.primary}40`} strokeWidth={1}
+          />
+        )}
+      </svg>
+
+      <AnimatePresence>
+        {hovered !== null && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            exit={{ opacity: 0 }}
+            transition={{ duration: 0.12 }}
+            className="absolute pointer-events-none rounded-xl px-3 py-2 text-xs space-y-1"
+            style={{
+              background: C.glass, border: `1px solid ${C.border}`, backdropFilter: 'blur(12px)',
+              top: 4, left: `${Math.min(((hovered / (data.length - 1)) * 70), 60)}%`, minWidth: 110,
+              boxShadow: '0 8px 32px rgba(0,0,0,0.4)',
+            }}
+          >
+            <p style={{ color: C.text2 }} className="font-medium">{data[hovered].month}</p>
+            <div className="flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-sm" style={{ background: C.emerald }} />
+              <span style={{ color: C.white }}>{formatCurrency(data[hovered].income)}</span>
+            </div>
+            <div className="flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-sm" style={{ background: C.rose }} />
+              <span style={{ color: C.text2 }}>{formatCurrency(data[hovered].expenses)}</span>
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  )
+}
+
+// ─── Donut chart: category distribution ──────────────────────────────────────
+type DonutSlice = { name: string; color: string; value: number }
+
+function DonutChart({ slices }: { slices: DonutSlice[] }) {
+  const [active, setActive] = useState<string | null>(null)
+  const total = slices.reduce((s, d) => s + d.value, 0)
+  if (total === 0) return null
+
+  const R = 52, r = 30, cx = 64, cy = 64
+
+  const paths = slices.reduce<Array<DonutSlice & { path: string; pct: number; endAngle: number }>>(
+    (acc, d) => {
+      const prevAngle = acc.length === 0 ? -Math.PI / 2 : (acc[acc.length - 1]?.endAngle ?? -Math.PI / 2)
+      const pct = d.value / total
+      const a0 = prevAngle
+      const a1 = prevAngle + pct * 2 * Math.PI
+      const large = pct > 0.5 ? 1 : 0
+      const x0 = cx + R * Math.cos(a0), y0 = cy + R * Math.sin(a0)
+      const x1 = cx + R * Math.cos(a1), y1 = cy + R * Math.sin(a1)
+      const ix0 = cx + r * Math.cos(a0), iy0 = cy + r * Math.sin(a0)
+      const ix1 = cx + r * Math.cos(a1), iy1 = cy + r * Math.sin(a1)
+      const path = `M${ix0.toFixed(2)},${iy0.toFixed(2)} L${x0.toFixed(2)},${y0.toFixed(2)} A${R},${R},0,${large},1,${x1.toFixed(2)},${y1.toFixed(2)} L${ix1.toFixed(2)},${iy1.toFixed(2)} A${r},${r},0,${large},0,${ix0.toFixed(2)},${iy0.toFixed(2)}Z`
+      acc.push({ ...d, path, pct, endAngle: a1 })
+      return acc
+    },
+    [],
+  )
+
+  const activeSlice = active ? slices.find(s => s.name === active) : null
+
+  return (
+    <div className="flex items-center gap-4">
+      <div className="relative shrink-0">
+        <svg width={128} height={128} viewBox="0 0 128 128">
+          {paths.map(s => (
+            <motion.path
+              key={s.name} d={s.path} fill={s.color}
+              opacity={active === null || active === s.name ? 1 : 0.3}
+              whileHover={{ scale: 1.05 }}
+              style={{ transformOrigin: `${cx}px ${cy}px`, cursor: 'pointer' }}
+              onHoverStart={() => setActive(s.name)}
+              onHoverEnd={() => setActive(null)}
+              transition={{ duration: 0.15 }}
+            />
           ))}
+          <circle cx={cx} cy={cy} r={r - 2} fill={C.card} />
+          <AnimatePresence mode="wait">
+            {activeSlice ? (
+              <motion.g key={activeSlice.name} initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+                <text x={cx} y={cy - 6} textAnchor="middle" fontSize={9} fill={C.text2}>{activeSlice.name.split(' ')[0]}</text>
+                <text x={cx} y={cy + 8} textAnchor="middle" fontSize={11} fontWeight="700" fill={activeSlice.color}>
+                  {formatCurrency(activeSlice.value, 'EUR').replace(',00', '')}
+                </text>
+              </motion.g>
+            ) : (
+              <motion.g key="total" initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+                <text x={cx} y={cy - 6} textAnchor="middle" fontSize={8} fill={C.muted}>Total</text>
+                <text x={cx} y={cy + 8} textAnchor="middle" fontSize={11} fontWeight="700" fill={C.white}>
+                  {formatCurrency(total, 'EUR').replace(',00', '')}
+                </text>
+              </motion.g>
+            )}
+          </AnimatePresence>
+        </svg>
+      </div>
+      <div className="flex flex-col gap-2 flex-1">
+        {paths.map(s => (
+          <div
+            key={s.name}
+            className="flex items-center gap-2 cursor-pointer"
+            onMouseEnter={() => setActive(s.name)}
+            onMouseLeave={() => setActive(null)}
+          >
+            <span className="w-2 h-2 rounded-sm shrink-0" style={{ background: s.color, opacity: active === null || active === s.name ? 1 : 0.3 }} />
+            <span className="text-xs flex-1 truncate" style={{ color: active === s.name ? C.white : C.text2 }}>{s.name}</span>
+            <span className="text-xs tabular-nums" style={{ color: active === s.name ? s.color : C.muted }}>
+              {Math.round(s.pct * 100)}%
+            </span>
+          </div>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// ─── Accounts table ───────────────────────────────────────────────────────────
+type AccountRow = {
+  id: string
+  name: string
+  color: string
+  currentBalance: number
+  monthlyChange: number | null
+}
+
+function CuentasTable({ accounts }: { accounts: AccountRow[] }) {
+  return (
+    <div className="space-y-1">
+      <AnimatePresence mode="popLayout">
+        {accounts.map((acc, i) => {
+          const pos = (acc.monthlyChange ?? 0) >= 0
+          return (
+            <motion.div
+              key={acc.id}
+              layout
+              initial={{ opacity: 0, x: -8 }}
+              animate={{ opacity: 1, x: 0 }}
+              exit={{ opacity: 0, x: 8 }}
+              transition={{ duration: 0.2, delay: i * 0.04 }}
+              className="flex items-center gap-3 px-3 py-2.5 rounded-xl cursor-pointer"
+              whileHover={{ backgroundColor: '#151E2E', paddingLeft: '18px' }}
+              style={{ background: 'transparent', transition: 'background 0.15s, padding 0.15s' }}
+            >
+              <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: acc.color }} />
+              <span className="flex-1 text-sm" style={{ color: C.white }}>{acc.name}</span>
+              <div className="text-right">
+                <p className="text-sm font-semibold tabular-nums" style={{ color: C.white }}>
+                  {formatCurrency(acc.currentBalance)}
+                </p>
+                {acc.monthlyChange !== null && (
+                  <p className="text-xs tabular-nums" style={{ color: pos ? C.emerald : C.rose }}>
+                    {pos ? '+' : ''}{formatCurrency(acc.monthlyChange)}
+                  </p>
+                )}
+              </div>
+              <ChevronRight size={14} style={{ color: C.faint }} />
+            </motion.div>
+          )
+        })}
+      </AnimatePresence>
+    </div>
+  )
+}
+
+// ─── Card wrapper ─────────────────────────────────────────────────────────────
+function Card({
+  children, className = '', delay = 0,
+}: {
+  children: ReactNode; className?: string; delay?: number
+}) {
+  const ref = useRef<HTMLDivElement>(null)
+  const inView = useInView(ref, { once: true, margin: '-10px' })
+  return (
+    <motion.div
+      ref={ref}
+      initial={{ opacity: 0, y: 24 }}
+      animate={inView ? { opacity: 1, y: 0 } : {}}
+      transition={{ duration: 0.55, delay, ease: [0.16, 1, 0.3, 1] }}
+      whileHover={{ y: -1 }}
+      className={`rounded-2xl p-5 ${className}`}
+      style={{ background: C.card, border: `1px solid ${C.border}`, transition: 'box-shadow 0.2s' }}
+    >
+      {children}
+    </motion.div>
+  )
+}
+
+function CardHeader({ title, action }: { title: string; action?: ReactNode }) {
+  return (
+    <div className="flex items-center justify-between mb-4">
+      <p className="text-xs font-semibold uppercase tracking-widest" style={{ color: C.muted }}>{title}</p>
+      {action && <div>{action}</div>}
+    </div>
+  )
+}
+
+// ─── Stat card ────────────────────────────────────────────────────────────────
+function StatCard({
+  label, value, delta, deltaLabel, color, delay = 0,
+}: {
+  label: string; value: number; delta?: number | null; deltaLabel?: string; color: string; delay?: number
+}) {
+  const ref = useRef<HTMLDivElement>(null)
+  const inView = useInView(ref, { once: true, margin: '-10px' })
+  const positive = (delta ?? 0) >= 0
+
+  return (
+    <motion.div
+      ref={ref}
+      initial={{ opacity: 0, y: 20 }}
+      animate={inView ? { opacity: 1, y: 0 } : {}}
+      transition={{ duration: 0.5, delay, ease: [0.16, 1, 0.3, 1] }}
+      whileHover={{ y: -2, boxShadow: `0 12px 40px ${color}15` }}
+      className="rounded-2xl p-4"
+      style={{ background: C.card, border: `1px solid ${C.border}`, transition: 'box-shadow 0.2s' }}
+    >
+      <div className="flex items-start justify-between mb-3">
+        <p className="text-xs font-medium" style={{ color: C.muted }}>{label}</p>
+        <div className="w-8 h-8 rounded-xl flex items-center justify-center" style={{ background: `${color}18` }}>
+          <Wallet size={15} style={{ color }} />
         </div>
       </div>
-      <ResumenMensualChart data={filtered} />
-    </div>
+      <p className="text-2xl font-bold tabular-nums mb-1" style={{ color: C.white, lineHeight: 1.2 }}>
+        {inView
+          ? <AnimatedNumber value={value} decimals={2} duration={1.2 + delay * 0.3} color={C.white} />
+          : '—'}
+      </p>
+      {delta != null && (
+        <div className="flex items-center gap-1">
+          {positive
+            ? <ArrowUpRight size={12} style={{ color: C.emerald }} />
+            : <ArrowDownRight size={12} style={{ color: C.rose }} />}
+          <span className="text-xs" style={{ color: positive ? C.emerald : C.rose }}>
+            {positive ? '+' : ''}{delta.toFixed(1)}% {deltaLabel}
+          </span>
+        </div>
+      )}
+    </motion.div>
   )
 }
 
-// ── Patrimonio chart card (shared EvolutionChart, single total series) ──────
-function PatrimonioChartCard({ allEvolution }: { allEvolution: EvolutionPoint[] }) {
-  if (allEvolution.length < 2) return null
-
-  const series: EvolutionSeries[] = [
-    {
-      id: 'total',
-      name: 'Patrimonio total',
-      color: '#6366F1',
-      values: allEvolution.map(point => point.total),
-    },
-  ]
-
-  return (
-    <div className="bg-[#141925] border border-[#1E2A3A] rounded-xl p-4">
-      <EvolutionChart
-        series={series}
-        labels={allEvolution.map(point => point.month)}
-        title="Evolución del patrimonio"
-        showLegend={false}
-      />
-    </div>
-  )
-}
-
+// ─── Main component ───────────────────────────────────────────────────────────
 export function DashboardView({
   summary,
-  year,
-  month,
   budgetWidget,
+  patrimonioChangePct,
+  monthlyContributions,
 }: {
   summary: DashboardSummary
-  year: number
-  month: number
   budgetWidget: ReactNode
+  patrimonioChangePct: number | null
+  monthlyContributions: MonthlyContribution[]
 }) {
-  const isEmpty =
-    summary.totalBalance === 0 && summary.accounts.every(a => a.currentBalance === 0)
+  const isEmpty = summary.totalBalance === 0 && summary.accounts.every(a => a.currentBalance === 0)
 
   if (isEmpty) {
     return (
-      <div className="bg-[#141925] border border-[#1E2A3A] rounded-xl p-6 text-center text-[#94A3B8] text-sm">
+      <div className="rounded-2xl p-6 text-center text-sm" style={{ background: C.card, border: `1px solid ${C.border}`, color: C.text2 }}>
         No hay datos aún. Ve a Recap para cerrar tu primer mes.
       </div>
     )
   }
 
+  // Build area chart data: evolution totals merged with cumulative contributions per month
+  const cumulativeContribByMonth = new Map<string, number>()
+  let runningContrib = 0
+  for (const c of monthlyContributions) {
+    runningContrib += c.contributions
+    cumulativeContribByMonth.set(c.month, runningContrib)
+  }
+  const areaData: AreaPoint[] = summary.allEvolution.map(e => ({
+    month: e.month,
+    valor: e.total,
+    aportado: cumulativeContribByMonth.get(e.month) ?? 0,
+  }))
+
+  // PnL bar chart data (last 6 months for readability)
+  const pnlData: PnlPoint[] = summary.monthlyPnl.slice(-6).map(p => ({
+    month: p.month,
+    income: p.income,
+    expenses: p.expenses,
+  }))
+
+  // Donut slices from category totals of this month (use invGain as proxy — real data is in BudgetWidget)
+  // Build from allEvolution distribution using accounts monthlyChange
+  const donutSlices: DonutSlice[] = summary.accounts
+    .filter(a => a.monthlyChange !== null && a.monthlyChange !== 0)
+    .map(a => ({
+      name: a.name,
+      color: a.color,
+      value: Math.abs(a.currentBalance),
+    }))
+    .sort((a, b) => b.value - a.value)
+    .slice(0, 7)
+
+  const accountRows: AccountRow[] = summary.accounts.map(a => ({
+    id: a.id,
+    name: a.name,
+    color: a.color,
+    currentBalance: a.currentBalance,
+    monthlyChange: a.monthlyChange,
+  }))
+
+  // Savings (ahorro) = income - expenses this month
+  const ahorro = summary.monthlyIncome - summary.monthlyExpenses
+  const ahorroRatio = summary.monthlyIncome > 0
+    ? Math.round((ahorro / summary.monthlyIncome) * 100)
+    : 0
+
   return (
-    <div className="space-y-4">
-      {/* ── Banner recap pendiente ── */}
+    <div style={{ background: C.bg }}>
+      {/* Recap pending banner */}
       {!summary.hasCurrentMonthSnapshot && (
-        <div className="bg-amber-950/40 border border-amber-700/50 rounded-xl px-4 py-3 flex items-center justify-between">
-          <p className="text-amber-300 text-sm">No has cerrado {summary.currentMonthLabel} aún</p>
+        <div className="rounded-xl px-4 py-3 flex items-center justify-between mb-4"
+          style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.3)' }}>
+          <p className="text-sm" style={{ color: C.amber }}>No has cerrado {summary.currentMonthLabel} aún</p>
           <Link
             href={`/recap?year=${summary.currentYear}&month=${summary.currentMonth}`}
-            className="text-amber-400 text-xs hover:text-amber-300"
+            className="text-xs"
+            style={{ color: C.amber }}
           >
             Ir al Recap →
           </Link>
         </div>
       )}
 
-      {/* ── Tarjeta principal: Patrimonio total ── */}
-      <div className="bg-[#141925] border border-[#1E2A3A] rounded-xl p-5">
-        <p className="text-sm text-[#94A3B8] mb-1">Patrimonio total</p>
-        {summary.latestSnapshotMonth === null ? (
-          <p className="text-sm text-[#94A3B8]">
-            Sin datos aún. Cierra tu primer mes desde Recap.
-          </p>
-        ) : (
-          <>
-            <p className="text-3xl font-bold text-white mb-2">
-              {formatCurrency(summary.totalBalance)}
-            </p>
-            <p className="text-sm text-[#94A3B8]">
-              TAI: {formatCurrency(summary.tai)}&nbsp;&nbsp;TDI: {formatCurrency(summary.tdi)}
-            </p>
-          </>
+      {/* Bento grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+
+        {/* KPI row */}
+        <StatCard
+          label="Patrimonio total"
+          value={summary.totalBalance}
+          delta={patrimonioChangePct}
+          deltaLabel="este mes"
+          color={C.primary}
+          delay={0}
+        />
+        <StatCard
+          label="Ingresos del mes"
+          value={summary.monthlyIncome}
+          color={C.emerald}
+          delay={0.05}
+        />
+        <StatCard
+          label="Gastos del mes"
+          value={summary.monthlyExpenses}
+          color={C.rose}
+          delay={0.1}
+        />
+
+        {/* Evolution area chart */}
+        {areaData.length >= 2 && (
+          <Card delay={0.15} className="xl:col-span-2">
+            <CardHeader
+              title="Evolución del patrimonio"
+              action={
+                <div className="flex gap-3">
+                  {[{ color: C.primary, label: 'Valor', dash: false }, { color: C.emerald, label: 'Aportado', dash: true }].map(l => (
+                    <span key={l.label} className="flex items-center gap-1.5 text-[10px]" style={{ color: C.muted }}>
+                      <span
+                        className="w-5 h-0.5 inline-block"
+                        style={{ background: l.color, opacity: l.dash ? 0.7 : 1, borderTop: l.dash ? `1px dashed ${l.color}` : undefined }}
+                      />
+                      {l.label}
+                    </span>
+                  ))}
+                </div>
+              }
+            />
+            <PatrimonioAreaChart data={areaData} />
+          </Card>
         )}
+
+        {/* Ahorro del mes */}
+        <Card delay={0.2}>
+          <CardHeader title="Ahorro del mes" />
+          <div className="flex flex-col items-center justify-center py-2 gap-1">
+            <p className="text-3xl font-bold tabular-nums" style={{ color: C.white }}>
+              {formatCurrency(ahorro)}
+            </p>
+            {summary.monthlyIncome > 0 && (
+              <p className="text-sm" style={{ color: C.emerald }}>
+                {ahorroRatio}% de los ingresos
+              </p>
+            )}
+            {summary.monthlyIncome > 0 && (
+              <div className="w-full mt-3 rounded-full h-2 overflow-hidden" style={{ background: C.faint }}>
+                <motion.div
+                  className="h-full rounded-full"
+                  style={{ background: `linear-gradient(90deg, ${C.primary}, ${C.emerald})` }}
+                  initial={{ width: 0 }}
+                  animate={{ width: `${Math.max(0, Math.min(ahorroRatio, 100))}%` }}
+                  transition={{ duration: 0.9, delay: 0.3, ease: [0.16, 1, 0.3, 1] }}
+                />
+              </div>
+            )}
+          </div>
+        </Card>
+
+        {/* Accounts table */}
+        {accountRows.length > 0 && (
+          <Card delay={0.25} className="xl:col-span-2">
+            <CardHeader
+              title="Mis cuentas"
+              action={
+                <Link href="/patrimonio" className="text-xs" style={{ color: C.primary }}>
+                  Ver en Patrimonio →
+                </Link>
+              }
+            />
+            <CuentasTable accounts={accountRows} />
+          </Card>
+        )}
+
+        {/* Donut: distribution */}
+        {donutSlices.length > 0 && (
+          <Card delay={0.3}>
+            <CardHeader title="Distribución de patrimonio" />
+            <DonutChart slices={donutSlices} />
+          </Card>
+        )}
+
+        {/* P&L bar chart */}
+        {pnlData.length >= 2 && (
+          <Card delay={0.35} className="md:col-span-2 xl:col-span-1">
+            <CardHeader
+              title="Ingresos vs Gastos"
+              action={
+                <div className="flex gap-3">
+                  {[{ color: C.emerald, label: 'Ingresos' }, { color: C.rose, label: 'Gastos' }].map(l => (
+                    <span key={l.label} className="flex items-center gap-1.5 text-[10px]" style={{ color: C.muted }}>
+                      <span className="w-2 h-2 rounded-sm inline-block" style={{ background: l.color }} />{l.label}
+                    </span>
+                  ))}
+                </div>
+              }
+            />
+            <PnlBarChart data={pnlData} />
+          </Card>
+        )}
+
+        {/* Budget card with expandable comparativa */}
+        <div className="xl:col-span-3">
+          {budgetWidget}
+        </div>
+
       </div>
-
-      {/* ── Gráfico de evolución con selector de rango ── */}
-      <PatrimonioChartCard allEvolution={summary.allEvolution} />
-
-      {/* ── Resumen mensual ── */}
-      {summary.monthlyPnl.length >= 2 && (
-        <ResumenMensualCard data={summary.monthlyPnl} />
-      )}
-
-      {/* ── Presupuesto del mes ── */}
-      {budgetWidget}
-
     </div>
   )
 }

@@ -174,6 +174,17 @@ export default async function PatrimonioPage() {
     accounts.map(acc => acc.latestSnapshot?.closingBalance ?? 0),
   )
 
+  // Compute prevTotalPatrimony: sum of closingBalance for the penultimate month across all accounts
+  const monthTotalsMap = new Map<string, number>()
+  for (const snap of rawSnapshots) {
+    const existing = monthTotalsMap.get(snap.month) ?? 0
+    monthTotalsMap.set(snap.month, existing + snap.closingBalance)
+  }
+  const sortedMonths = Array.from(monthTotalsMap.keys()).sort((a, b) => a.localeCompare(b))
+  const prevTotalPatrimony: number = sortedMonths.length >= 2
+    ? (monthTotalsMap.get(sortedMonths[sortedMonths.length - 2]) ?? 0)
+    : 0
+
   const expenseByAccountMonth = new Map<string, number>()
   for (const row of expenses) {
     expenseByAccountMonth.set(`${row.accountId}|${row.month}`, row.expense)
@@ -285,7 +296,7 @@ export default async function PatrimonioPage() {
             </Link>
           </div>
         ) : (
-          <PatrimonioBreakdown groups={groups} />
+          <PatrimonioBreakdown groups={groups} prevTotalPatrimony={prevTotalPatrimony} />
         )}
 
         {summaryMonths.length >= 2 ? (

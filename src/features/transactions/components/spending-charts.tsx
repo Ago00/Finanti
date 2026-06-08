@@ -1,223 +1,453 @@
 'use client'
 
-import { useState } from 'react'
+import { useState, useRef } from 'react'
+import { motion, AnimatePresence, useInView } from 'motion/react'
+import { ArrowUpRight, ArrowDownRight } from 'lucide-react'
 import type { CategoryTotal, MonthlyExpenseTotal } from '@/features/transactions/queries'
 import { formatCurrency } from '@/lib/formatting'
 
-const BAR_COLORS = [
-  '#6366F1',
-  '#10B981',
-  '#F59E0B',
-  '#EF4444',
-  '#8B5CF6',
-  '#06B6D4',
-  '#EC4899',
-  '#F97316',
-]
+// ─── Design tokens ────────────────────────────────────────────────────────────
+const C = {
+  bg:         '#07090F',
+  card:       '#111827',
+  cardHover:  '#151E2E',
+  glass:      'rgba(17,24,39,0.85)',
+  border:     '#1F2937',
+  primary:    '#6366F1',
+  primaryLit: '#818CF8',
+  emerald:    '#10B981',
+  rose:       '#F43F5E',
+  amber:      '#F59E0B',
+  white:      '#F9FAFB',
+  muted:      '#6B7280',
+  faint:      '#374151',
+  text2:      '#9CA3AF',
+}
 
+const BAR_H = 160
 
-// ── Barras horizontales por categoría ─────────────────────────────────────────
-function CategoryBars({ totals }: { totals: CategoryTotal[] }) {
-  if (totals.length === 0) return null
+// ─── Evolución mensual (barras clicables) ─────────────────────────────────────
+function EvolucionBars({
+  monthlyTotals, activeIdx, onSelect, budgetTotal,
+}: {
+  monthlyTotals: MonthlyExpenseTotal[]
+  activeIdx: number
+  onSelect: (i: number) => void
+  budgetTotal: number
+}) {
+  const ref = useRef<HTMLDivElement>(null)
+  const inView = useInView(ref, { once: true })
+  const maxVal = Math.max(...monthlyTotals.map(t => t.total), budgetTotal) * 1.1 || 1
+  const pptoY = budgetTotal > 0 ? Math.round((budgetTotal / maxVal) * BAR_H) : null
 
-  const grandTotal = totals.reduce((sum, t) => sum + t.total, 0)
+  return (
+    <div ref={ref} className="w-full select-none">
+      <div className="relative w-full" style={{ height: BAR_H }}>
+        {[0.25, 0.5, 0.75, 1].map(t => (
+          <div
+            key={t}
+            className="absolute left-0 right-0 pointer-events-none"
+            style={{ bottom: `${t * 100}%`, borderTop: `1px solid ${C.border}` }}
+          />
+        ))}
+
+        {pptoY !== null && (
+          <div
+            className="absolute left-0 right-0 z-10 pointer-events-none flex items-center justify-end"
+            style={{ bottom: pptoY, borderTop: `1px dashed ${C.amber}66` }}
+          >
+            <span className="text-[9px] font-medium pr-1" style={{ color: C.amber, background: C.card }}>Ppto</span>
+          </div>
+        )}
+
+        <div className="absolute inset-0 flex gap-1">
+          {monthlyTotals.map((t, i) => {
+            const barH = Math.round((t.total / maxVal) * BAR_H)
+            const isActive = activeIdx === i
+            const over = budgetTotal > 0 && t.total > budgetTotal
+            const color = over ? C.rose : C.primary
+            return (
+              <div
+                key={t.month}
+                onClick={() => onSelect(i)}
+                className="relative flex-1 flex flex-col cursor-pointer"
+                style={{ justifyContent: 'flex-end', alignItems: 'center' }}
+              >
+                <AnimatePresence>
+                  {isActive && (
+                    <motion.span
+                      initial={{ opacity: 0, y: 4 }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0 }}
+                      className="absolute text-[9px] font-bold tabular-nums"
+                      style={{ bottom: barH + 3, color: over ? C.rose : C.primaryLit }}
+                    >
+                      {(t.total / 1000).toFixed(1)}k
+                    </motion.span>
+                  )}
+                </AnimatePresence>
+                <motion.div
+                  style={{
+                    width: '55%',
+                    borderRadius: '3px 3px 0 0',
+                    background: isActive ? color : `${color}55`,
+                    flexShrink: 0,
+                  }}
+                  initial={{ height: 0 }}
+                  animate={inView ? { height: barH } : { height: 0 }}
+                  transition={{ duration: 0.5, delay: i * 0.07, ease: [0.16, 1, 0.3, 1] }}
+                />
+              </div>
+            )
+          })}
+        </div>
+      </div>
+
+      <div style={{ height: 1, background: C.border }} />
+
+      <div className="flex gap-1 mt-1.5">
+        {monthlyTotals.map((t, i) => (
+          <button key={t.month} onClick={() => onSelect(i)} className="flex-1 text-center">
+            <span className="text-[10px] font-medium" style={{ color: activeIdx === i ? C.white : C.muted }}>
+              {t.month.slice(5)}
+            </span>
+          </button>
+        ))}
+      </div>
+    </div>
+  )
+}
+
+// ─── Panel de categorías con toggle comparativa ───────────────────────────────
+function CategoryPanel({
+  totals, prevMonthTotals, threeMonthAvgTotals, activeFilter, onFilterChange,
+}: {
+  totals: CategoryTotal[]
+  prevMonthTotals: CategoryTotal[]
+  threeMonthAvgTotals: CategoryTotal[]
+  activeFilter: string | null
+  onFilterChange: (id: string | null) => void
+}) {
+  const [comparativa, setComparativa] = useState<'ant' | 'media'>('ant')
+  const grandTotal = totals.reduce((s, t) => s + t.total, 0)
   if (grandTotal === 0) return null
 
-  return (
-    <div className="space-y-2">
-      {totals.map((t, i) => {
-        const pct = grandTotal > 0 ? (t.total / grandTotal) * 100 : 0
-        const color = BAR_COLORS[i % BAR_COLORS.length]
-        const name = t.categoryName ?? 'Sin categoría'
+  const refMap = new Map<string | null, number>()
+  const refTotals = comparativa === 'ant' ? prevMonthTotals : threeMonthAvgTotals
+  for (const t of refTotals) {
+    refMap.set(t.categoryId, t.total)
+  }
 
-        return (
-          <div key={t.categoryId ?? '__null__'} className="space-y-1">
-            <div className="flex justify-between items-baseline text-xs">
-              <span className="text-[#94A3B8] truncate max-w-[60%]">{name}</span>
-              <span className="text-[#CBD5E1] ml-2 flex-shrink-0">
-                {formatCurrency(t.total)}{' '}
-                <span className="text-[#64748B]">({pct.toFixed(0)}%)</span>
-              </span>
-            </div>
-            <div className="h-2 w-full bg-[#1E2A3A] rounded-full overflow-hidden">
-              <div
-                className="h-full rounded-full transition-all duration-300"
-                style={{ width: `${pct}%`, backgroundColor: color }}
-              />
-            </div>
-          </div>
-        )
-      })}
-    </div>
-  )
-}
-
-// ── Barras verticales de evolución mensual ────────────────────────────────────
-function MonthlyBars({ totals }: { totals: MonthlyExpenseTotal[] }) {
-  const [tooltip, setTooltip] = useState<{
-    x: number
-    y: number
-    entry: MonthlyExpenseTotal
-  } | null>(null)
-
-  if (totals.length < 2) return null
-
-  const W = 320
-  const H = 120
-  const padL = 8
-  const padR = 8
-  const padT = 8
-  const padB = 20
-
-  const innerW = W - padL - padR
-  const innerH = H - padT - padB
-
-  const maxVal = Math.max(...totals.map(t => t.total), 1)
-
-  const barW = innerW / totals.length
-  const gap = barW * 0.25
-
-  const now = new Date()
-  const currentMonth = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}`
-
-  const labelIndices = new Set([0, Math.floor((totals.length - 1) / 2), totals.length - 1])
+  const sorted = [...totals].sort((a, b) => b.total - a.total)
 
   return (
-    <div className="relative w-full" style={{ paddingBottom: `${(H / W) * 100}%` }}>
-      <svg
-        viewBox={`0 0 ${W} ${H}`}
-        className="absolute inset-0 w-full h-full"
-        overflow="visible"
-        onMouseLeave={() => setTooltip(null)}
-      >
-        {totals.map((t, i) => {
-          const barHeight = (t.total / maxVal) * innerH
-          const x = padL + i * barW + gap / 2
-          const w = barW - gap
-          const y = padT + innerH - barHeight
-          const isCurrentMonth = t.month === currentMonth
-          const cx = x + w / 2
+    <div>
+      <div className="flex items-center justify-between mb-4">
+        <p className="text-xs font-semibold uppercase tracking-widest" style={{ color: C.muted }}>Por categoría</p>
+        <div className="flex rounded-lg overflow-hidden" style={{ border: `1px solid ${C.border}` }}>
+          {(['ant', 'media'] as const).map(opt => (
+            <button
+              key={opt}
+              onClick={() => setComparativa(opt)}
+              className="px-2.5 py-1 text-[10px] font-medium transition-colors"
+              style={{
+                background: comparativa === opt ? C.primary : 'transparent',
+                color: comparativa === opt ? C.white : C.muted,
+              }}
+            >
+              {opt === 'ant' ? 'vs mes ant.' : 'vs media 3m'}
+            </button>
+          ))}
+        </div>
+      </div>
 
-          const v = t.total
+      <div className="space-y-3">
+        {sorted.map((t, i) => {
+          const pct = (t.total / grandTotal) * 100
+          const isActive = activeFilter === (t.categoryId ?? '__null__')
+          const ref = refMap.get(t.categoryId) ?? 0
+          const delta = ref > 0 ? t.total - ref : 0
+          const deltaPct = ref > 0 ? Math.round((delta / ref) * 100) : null
+          const better = delta <= 0
+
+          // Assign a consistent color by index
+          const COLORS = ['#F59E0B', '#8B5CF6', '#F97316', '#3B82F6', '#10B981', '#EC4899', '#EF4444', '#06B6D4']
+          const color = COLORS[i % COLORS.length]
 
           return (
-            <g key={t.month}>
-              <rect
-                x={x}
-                y={y}
-                width={w}
-                height={barHeight}
-                rx={2}
-                fill={isCurrentMonth ? '#6366F1' : '#1E2A3A'}
-              />
-              {barHeight > 12 && (
-                <text
-                  x={cx}
-                  y={y - 3}
-                  textAnchor="middle"
-                  fontSize={8}
-                  fill="#94A3B8"
-                >
-                  {v >= 1000 ? `${(v / 1000).toFixed(1)}k` : String(Math.round(v))}
-                </text>
-              )}
-              {/* Invisible wider hit area */}
-              <rect
-                x={padL + i * barW}
-                y={padT}
-                width={barW}
-                height={innerH}
-                fill="transparent"
-                onMouseEnter={() => setTooltip({ x: cx, y, entry: t })}
-              />
-              {labelIndices.has(i) && (
-                <text
-                  x={cx}
-                  y={H - 4}
-                  textAnchor="middle"
-                  fontSize={9}
-                  fill="#64748B"
-                >
-                  {t.month.slice(0, 7)}
-                </text>
-              )}
-            </g>
+            <motion.div
+              key={t.categoryId ?? '__null__'}
+              initial={{ opacity: 0, x: -8 }}
+              animate={{ opacity: 1, x: 0 }}
+              transition={{ delay: 0.3 + i * 0.05 }}
+              whileHover={{ x: 2 }}
+              onClick={() => onFilterChange(isActive ? null : (t.categoryId ?? '__null__'))}
+              className="cursor-pointer"
+            >
+              <div className="flex items-center justify-between mb-1.5">
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="w-2 h-2 rounded-sm shrink-0" style={{ background: color }} />
+                  <span className="text-xs truncate" style={{ color: isActive ? C.white : C.text2 }}>
+                    {t.categoryName ?? 'Sin categoría'}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2 shrink-0 ml-2">
+                  <span className="text-xs tabular-nums font-medium" style={{ color: isActive ? C.white : C.text2 }}>
+                    {formatCurrency(t.total)}
+                  </span>
+                  {deltaPct !== null && (
+                    <span
+                      className="text-[10px] tabular-nums font-medium px-1.5 py-0.5 rounded-md"
+                      style={{
+                        background: better ? `${C.emerald}15` : `${C.rose}15`,
+                        color: better ? C.emerald : C.rose,
+                      }}
+                    >
+                      {delta === 0 ? '=' : `${better ? '' : '+'}${deltaPct}%`}
+                    </span>
+                  )}
+                </div>
+              </div>
+              <div className="relative rounded-full h-1.5 overflow-visible" style={{ background: C.faint }}>
+                <motion.div
+                  className="h-full rounded-full absolute top-0 left-0"
+                  style={{ background: color, opacity: activeFilter && !isActive ? 0.25 : 0.9 }}
+                  initial={{ width: 0 }}
+                  animate={{ width: `${pct}%` }}
+                  transition={{ duration: 0.6, delay: 0.3 + i * 0.05, ease: [0.16, 1, 0.3, 1] }}
+                />
+                {ref > 0 && (
+                  <div
+                    className="absolute top-1/2 -translate-y-1/2 w-0.5 h-3 rounded-full"
+                    style={{ left: `${(ref / grandTotal) * 100}%`, background: C.muted, opacity: 0.5 }}
+                  />
+                )}
+              </div>
+              <AnimatePresence>
+                {isActive && ref > 0 && (
+                  <motion.p
+                    initial={{ opacity: 0, height: 0 }}
+                    animate={{ opacity: 1, height: 'auto' }}
+                    exit={{ opacity: 0, height: 0 }}
+                    className="text-[10px] mt-1"
+                    style={{ color: C.muted }}
+                  >
+                    {comparativa === 'ant' ? 'Mes anterior' : 'Media 3m'}: {formatCurrency(ref)}
+                    {' · '}{better ? 'Bajaste' : 'Subiste'} {formatCurrency(Math.abs(delta))}
+                  </motion.p>
+                )}
+              </AnimatePresence>
+            </motion.div>
           )
         })}
-
-        {/* Active bar top dot */}
-        {tooltip && (
-          <circle
-            cx={tooltip.x}
-            cy={tooltip.y}
-            r={3}
-            fill="#6366F1"
-          />
-        )}
-      </svg>
-
-      {/* Tooltip */}
-      {tooltip && (
-        <div
-          className="absolute pointer-events-none z-10 bg-[#141925] border border-[#1E2A3A] rounded-lg px-2 py-1 text-xs"
-          style={{
-            left: `${(tooltip.x / W) * 100}%`,
-            top: `${(tooltip.y / H) * 100}%`,
-            transform: 'translate(-50%, -130%)',
-          }}
-        >
-          <p className="text-[#94A3B8]">{tooltip.entry.month}</p>
-          <p className="text-[#6366F1] font-medium">{formatCurrency(tooltip.entry.total)}</p>
-        </div>
-      )}
+      </div>
     </div>
   )
 }
 
-// ── Componente principal ──────────────────────────────────────────────────────
+// ─── KPI card ─────────────────────────────────────────────────────────────────
+function KpiCard({
+  label, value, sub, color, delta, deltaLabel, delay = 0,
+}: {
+  label: string
+  value: string | number
+  sub: string
+  color: string
+  delta?: number | null
+  deltaLabel?: string
+  delay?: number
+}) {
+  const displayValue = typeof value === 'number' ? formatCurrency(value) : String(value)
+  const isPositiveDelta = (delta ?? 0) < 0 // lower spending = better
+
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      transition={{ delay, duration: 0.5, ease: [0.16, 1, 0.3, 1] }}
+      whileHover={{ y: -2 }}
+      className="rounded-2xl p-4"
+      style={{ background: C.card, border: `1px solid ${C.border}` }}
+    >
+      <p className="text-xs font-medium mb-2" style={{ color: C.muted }}>{label}</p>
+      <p className="text-2xl font-bold tabular-nums mb-0.5" style={{ color }}>
+        {displayValue}
+      </p>
+      <div className="flex items-center gap-2">
+        <span className="text-xs" style={{ color: C.muted }}>{sub}</span>
+        {delta != null && (
+          <span className="text-xs flex items-center gap-0.5" style={{ color: isPositiveDelta ? C.emerald : C.rose }}>
+            {isPositiveDelta ? <ArrowDownRight size={10} /> : <ArrowUpRight size={10} />}
+            {formatCurrency(Math.abs(delta))} {deltaLabel}
+          </span>
+        )}
+      </div>
+    </motion.div>
+  )
+}
+
+// ─── Main component ───────────────────────────────────────────────────────────
 type Props = {
   categoryTotals: CategoryTotal[]
   monthlyTotals: MonthlyExpenseTotal[]
   currentMonthTotal: number
   budgetTotal: number
+  prevMonthCategoryTotals: CategoryTotal[]
+  threeMonthAvgCategoryTotals: CategoryTotal[]
+  year: number
+  month: number
 }
 
-export function SpendingCharts({ categoryTotals, monthlyTotals, currentMonthTotal, budgetTotal }: Props) {
+export function SpendingCharts({
+  categoryTotals,
+  monthlyTotals,
+  currentMonthTotal,
+  budgetTotal,
+  prevMonthCategoryTotals,
+  threeMonthAvgCategoryTotals,
+}: Props) {
+  const last6 = monthlyTotals.slice(-6)
+  // Default to last bar (current month) in the evolucion chart
+  const defaultActiveIdx = last6.length > 0 ? last6.length - 1 : 0
+  const [activeMonthIdx, setActiveMonthIdx] = useState(defaultActiveIdx)
+  const [categoryFilter, setCategoryFilter] = useState<string | null>(null)
+
   const hasCategoryData = categoryTotals.length > 0 && currentMonthTotal > 0
-  const hasMonthlyData = monthlyTotals.length >= 2
+  const hasMonthlyData = last6.length >= 2
   const pct = budgetTotal > 0 ? Math.round((currentMonthTotal / budgetTotal) * 100) : 0
 
   if (!hasCategoryData && !hasMonthlyData && budgetTotal <= 0) return null
 
+  // The largest category by spend
+  const topCategory = [...categoryTotals].sort((a, b) => b.total - a.total)[0]
+
+  // Build transaction-like rows from category totals filtered by selection
+  // (actual transaction list is rendered by TransactionDetailToggle in the page)
+  // This component shows the visual analytics; the transaction list is handled separately
+
   return (
     <div className="space-y-4">
-      {budgetTotal > 0 && (
-        <div className="bg-[#141925] border border-[#1E2A3A] rounded-xl p-4">
-          <div className="flex justify-between items-center mb-2">
-            <p className="text-xs text-[#94A3B8]">Presupuesto del mes</p>
-            <p className="text-xs text-[#94A3B8]">{formatCurrency(currentMonthTotal)} / {formatCurrency(budgetTotal)}</p>
+
+      {/* KPIs */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+        <KpiCard
+          label="Total gastado"
+          value={currentMonthTotal}
+          sub={budgetTotal > 0 ? `de ${formatCurrency(budgetTotal)}` : 'este mes'}
+          color={currentMonthTotal > budgetTotal && budgetTotal > 0 ? C.rose : C.white}
+          delay={0}
+        />
+        {topCategory && (
+          <KpiCard
+            label="Mayor gasto"
+            value={topCategory.total}
+            sub={topCategory.categoryName ?? 'Sin categoría'}
+            color={C.amber}
+            delay={0.06}
+          />
+        )}
+        <KpiCard
+          label="Categorías"
+          value={categoryTotals.length}
+          sub="con gastos este mes"
+          color={C.primary}
+          delay={0.12}
+        />
+      </div>
+
+      {/* Evolución mensual */}
+      {hasMonthlyData && (
+        <motion.div
+          initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }}
+          transition={{ delay: 0.2, duration: 0.5 }}
+          className="rounded-2xl p-5"
+          style={{ background: C.card, border: `1px solid ${C.border}` }}
+        >
+          <div className="flex items-center justify-between mb-4">
+            <p className="text-xs font-semibold uppercase tracking-widest" style={{ color: C.muted }}>
+              Evolución {last6.length} meses
+            </p>
+            <div className="flex items-center gap-3">
+              {budgetTotal > 0 && (
+                <span className="flex items-center gap-1.5 text-[10px]" style={{ color: C.muted }}>
+                  <span className="inline-block w-8 h-px" style={{ borderTop: `1px dashed ${C.amber}` }} />
+                  Presupuesto
+                </span>
+              )}
+              <span
+                className="text-xs font-semibold tabular-nums"
+                style={{ color: last6[activeMonthIdx] && budgetTotal > 0 && last6[activeMonthIdx].total > budgetTotal ? C.rose : C.primary }}
+              >
+                {last6[activeMonthIdx] ? formatCurrency(last6[activeMonthIdx].total) : ''}
+              </span>
+            </div>
           </div>
-          <div className="h-3 bg-[#1E2A3A] rounded-full overflow-hidden">
-            <div
-              className={`h-full rounded-full ${pct > 100 ? 'bg-red-500' : 'bg-[#6366F1]'}`}
-              style={{ width: `${Math.min(pct, 100)}%` }}
+          <div style={{ marginLeft: -4, marginRight: -4 }}>
+            <EvolucionBars
+              monthlyTotals={last6}
+              activeIdx={activeMonthIdx}
+              onSelect={setActiveMonthIdx}
+              budgetTotal={budgetTotal}
             />
           </div>
-          <p className="text-xs text-right mt-1 text-[#64748B]">{pct}% consumido</p>
-        </div>
+        </motion.div>
       )}
 
+      {/* Categories + transactions grid */}
       {hasCategoryData && (
-        <div className="bg-[#141925] border border-[#1E2A3A] rounded-xl p-4 space-y-3">
-          <p className="text-xs text-[#94A3B8]">Gastos por categoría</p>
-          <CategoryBars totals={categoryTotals} />
-        </div>
-      )}
+        <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
+          {/* Category panel */}
+          <motion.div
+            initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.25, duration: 0.5 }}
+            className="rounded-2xl p-5 xl:col-span-1"
+            style={{ background: C.card, border: `1px solid ${C.border}` }}
+          >
+            <CategoryPanel
+              totals={categoryTotals}
+              prevMonthTotals={prevMonthCategoryTotals}
+              threeMonthAvgTotals={threeMonthAvgCategoryTotals}
+              activeFilter={categoryFilter}
+              onFilterChange={setCategoryFilter}
+            />
+          </motion.div>
 
-      {hasMonthlyData && (
-        <div className="bg-[#141925] border border-[#1E2A3A] rounded-xl p-4 space-y-3">
-          <p className="text-xs text-[#94A3B8]">Evolución de gastos</p>
-          <MonthlyBars totals={monthlyTotals} />
+          {/* Budget progress (if budget exists) */}
+          {budgetTotal > 0 && (
+            <motion.div
+              initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.3, duration: 0.5 }}
+              className="rounded-2xl p-5 xl:col-span-2"
+              style={{ background: C.card, border: `1px solid ${C.border}` }}
+            >
+              <p className="text-xs font-semibold uppercase tracking-widest mb-3" style={{ color: C.muted }}>
+                Presupuesto del mes
+              </p>
+              <div className="flex justify-between items-center mb-2">
+                <span className="text-sm" style={{ color: C.muted }}>
+                  {formatCurrency(currentMonthTotal)} de {formatCurrency(budgetTotal)}
+                </span>
+                <span
+                  className="text-sm font-bold"
+                  style={{ color: pct > 100 ? C.rose : C.primary }}
+                >
+                  {pct}%
+                </span>
+              </div>
+              <div className="h-3 rounded-full overflow-hidden" style={{ background: C.faint }}>
+                <motion.div
+                  className="h-full rounded-full"
+                  style={{ background: pct > 100 ? C.rose : `linear-gradient(90deg, ${C.primary}, ${C.primaryLit})` }}
+                  initial={{ width: 0 }}
+                  animate={{ width: `${Math.min(pct, 100)}%` }}
+                  transition={{ duration: 0.9, ease: [0.16, 1, 0.3, 1] }}
+                />
+              </div>
+              <p className="text-xs text-right mt-1" style={{ color: C.muted }}>
+                {budgetTotal - currentMonthTotal >= 0
+                  ? `Quedan ${formatCurrency(budgetTotal - currentMonthTotal)}`
+                  : `Excedido en ${formatCurrency(currentMonthTotal - budgetTotal)}`}
+              </p>
+            </motion.div>
+          )}
         </div>
       )}
     </div>

@@ -131,6 +131,22 @@ export async function getBudgetTotalForMonth(year: number, month: number): Promi
   return Number(result[0]?.total ?? 0)
 }
 
+// Returns category totals for multiple months at once.
+// Keyed by 'YYYY-MM' so callers can address each month independently.
+export async function listCategoryTotalsByMonths(
+  months: { year: number; month: number }[],
+): Promise<Record<string, CategoryTotal[]>> {
+  if (months.length === 0) return {}
+
+  const result: Record<string, CategoryTotal[]> = {}
+  // Sequential to avoid PgBouncer connection exhaustion
+  for (const { year, month } of months) {
+    const key = `${year}-${String(month).padStart(2, '0')}`
+    result[key] = await listCategoryTotals(year, month)
+  }
+  return result
+}
+
 export async function listTransactionsByMonthFiltered(
   year: number,
   month: number,

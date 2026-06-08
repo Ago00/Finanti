@@ -187,6 +187,31 @@ export async function getDashboardBudgetLines(
   }))
 }
 
+// ─── Monthly contributions cumulative (for evolution chart) ──────────────────
+
+export type MonthlyContribution = {
+  month: string // 'YYYY-MM'
+  contributions: number
+}
+
+export async function getMonthlyContributions(): Promise<MonthlyContribution[]> {
+  const rows = await db
+    .select({
+      month: sql<string>`TO_CHAR(${monthlySnapshots.month}, 'YYYY-MM')`,
+      contributions: sum(monthlySnapshots.contributions),
+    })
+    .from(monthlySnapshots)
+    .innerJoin(accounts, eq(monthlySnapshots.accountId, accounts.id))
+    .where(and(isNull(monthlySnapshots.archivedAt), isNull(accounts.archivedAt)))
+    .groupBy(monthlySnapshots.month)
+    .orderBy(monthlySnapshots.month)
+
+  return rows.map(r => ({
+    month: r.month,
+    contributions: Number(r.contributions ?? 0),
+  }))
+}
+
 // ─── Monthly P&L (income / expenses / investment gain) ───────────────────────
 
 import type { MonthlyPnlPoint } from '@/features/dashboard/domain'
