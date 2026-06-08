@@ -117,7 +117,8 @@ function LegendItem({ color, label }: { color: string; label: string }) {
 }
 
 function AccountMiniChart({ chart, color }: { chart: AccountChartData; color: string }) {
-  if (chart.kind === 'none' || chart.months.length < 2) return null
+  if (chart.kind === 'none') return null
+  if (chart.months.length < 2) return null
 
   if (chart.kind === 'savings') {
     return (

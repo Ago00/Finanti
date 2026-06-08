@@ -191,12 +191,13 @@ function PnlBarChart({ data }: { data: PnlPoint[] }) {
   const [hovered, setHovered] = useState<number | null>(null)
   const W = 360, H = 100, padL = 40, padR = 8, padT = 8, padB = 20
   const iW = W - padL - padR, iH = H - padT - padB
-  const maxV = Math.max(...data.map(d => d.income), 1)
+
+  if (!data || data.length === 0) return null
+
   const n = data.length
+  const maxV = Math.max(...data.map(d => d.income), 1)
   const slot = iW / n
   const bw = Math.min(10, slot / 3.5)
-
-  if (n === 0) return null
 
   return (
     <div className="relative w-full">
@@ -303,7 +304,7 @@ function DonutChart({ slices }: { slices: DonutSlice[] }) {
     [],
   )
 
-  const activeSlice = active ? slices.find(s => s.name === active) : null
+  const activeSlice = active ? (slices.find(s => s.name === active) ?? null) : null
 
   return (
     <div className="flex items-center gap-4">
