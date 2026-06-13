@@ -422,34 +422,50 @@ export function SpendingCharts({
               className="rounded-2xl p-5 md:col-span-1"
               style={{ background: C.card, border: `1px solid ${C.border}` }}
             >
-              <p className="text-xs font-semibold uppercase tracking-widest mb-3" style={{ color: C.muted }}>
+              <p className="text-xs font-semibold uppercase tracking-widest mb-4" style={{ color: C.muted }}>
                 Presupuesto del mes
               </p>
-              <div className="flex justify-between items-center mb-2">
-                <span className="text-sm" style={{ color: C.muted }}>
-                  {formatCurrency(currentMonthTotal)} de {formatCurrency(budgetTotal)}
-                </span>
-                <span
-                  className="text-sm font-bold"
-                  style={{ color: pct > 100 ? C.rose : C.primary }}
-                >
-                  {pct}%
-                </span>
+              <div className="flex items-center gap-5">
+                {/* Vertical bar */}
+                <div className="flex flex-col items-center gap-1.5">
+                  <span className="text-[9px] tabular-nums" style={{ color: C.muted }}>
+                    {formatCurrency(budgetTotal)}
+                  </span>
+                  <div className="relative w-5 rounded-full overflow-hidden" style={{ background: C.faint, height: 110 }}>
+                    <motion.div
+                      className="absolute bottom-0 left-0 right-0 rounded-full"
+                      style={{ background: pct > 100 ? C.rose : `linear-gradient(0deg, ${C.primary}, ${C.primaryLit})` }}
+                      initial={{ height: 0 }}
+                      animate={{ height: `${Math.min(pct, 100)}%` }}
+                      transition={{ duration: 0.9, ease: [0.16, 1, 0.3, 1] }}
+                    />
+                  </div>
+                  <span className="text-[9px] tabular-nums" style={{ color: C.muted }}>0 €</span>
+                </div>
+                {/* Stats */}
+                <div className="space-y-3">
+                  <div>
+                    <p className="text-2xl font-bold tabular-nums" style={{ color: pct > 100 ? C.rose : C.primary }}>
+                      {pct}%
+                    </p>
+                    <p className="text-[10px]" style={{ color: C.muted }}>consumido</p>
+                  </div>
+                  <div>
+                    <p className="text-sm font-semibold tabular-nums" style={{ color: C.white }}>
+                      {formatCurrency(currentMonthTotal)}
+                    </p>
+                    <p className="text-[10px]" style={{ color: C.muted }}>gastado</p>
+                  </div>
+                  <div>
+                    <p className="text-sm tabular-nums font-medium" style={{ color: budgetTotal - currentMonthTotal >= 0 ? C.emerald : C.rose }}>
+                      {formatCurrency(Math.abs(budgetTotal - currentMonthTotal))}
+                    </p>
+                    <p className="text-[10px]" style={{ color: C.muted }}>
+                      {budgetTotal - currentMonthTotal >= 0 ? 'disponible' : 'excedido'}
+                    </p>
+                  </div>
+                </div>
               </div>
-              <div className="h-3 rounded-full overflow-hidden" style={{ background: C.faint }}>
-                <motion.div
-                  className="h-full rounded-full"
-                  style={{ background: pct > 100 ? C.rose : `linear-gradient(90deg, ${C.primary}, ${C.primaryLit})` }}
-                  initial={{ width: 0 }}
-                  animate={{ width: `${Math.min(pct, 100)}%` }}
-                  transition={{ duration: 0.9, ease: [0.16, 1, 0.3, 1] }}
-                />
-              </div>
-              <p className="text-xs text-right mt-1" style={{ color: C.muted }}>
-                {budgetTotal - currentMonthTotal >= 0
-                  ? `Quedan ${formatCurrency(budgetTotal - currentMonthTotal)}`
-                  : `Excedido en ${formatCurrency(currentMonthTotal - budgetTotal)}`}
-              </p>
             </motion.div>
           )}
         </div>
