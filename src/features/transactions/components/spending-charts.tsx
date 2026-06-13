@@ -402,7 +402,7 @@ export function SpendingCharts({
           <motion.div
             initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.25, duration: 0.5 }}
-            className="rounded-2xl p-5 md:col-span-1"
+            className="rounded-2xl p-5 md:col-span-2"
             style={{ background: C.card, border: `1px solid ${C.border}` }}
           >
             <CategoryPanel
@@ -419,7 +419,7 @@ export function SpendingCharts({
             <motion.div
               initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.3, duration: 0.5 }}
-              className="rounded-2xl p-5 md:col-span-2"
+              className="rounded-2xl p-5 md:col-span-1"
               style={{ background: C.card, border: `1px solid ${C.border}` }}
             >
               <p className="text-xs font-semibold uppercase tracking-widest mb-3" style={{ color: C.muted }}>
