@@ -257,8 +257,8 @@ export default async function PatrimonioPage() {
   }))
 
   return (
-    <div className="min-h-screen bg-[#0B0F1A] py-12 px-6 pb-24">
-      <div className="max-w-md mx-auto space-y-6">
+    <div className="min-h-screen bg-[#0B0F1A] py-12 px-4 sm:px-6 pb-24">
+      <div className="max-w-3xl mx-auto space-y-6">
 
         <div className="space-y-1">
           <h1 className="text-2xl font-semibold text-white">Patrimonio</h1>
