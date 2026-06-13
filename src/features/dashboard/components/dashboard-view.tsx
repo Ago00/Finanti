@@ -647,7 +647,7 @@ export function DashboardView({
 
         {/* Accounts table */}
         {accountRows.length > 0 && (
-          <Card delay={0.25} className="xl:col-span-2">
+          <Card delay={0.25} className="md:col-span-2 xl:col-span-3">
             <CardHeader
               title="Mis cuentas"
               action={
@@ -670,7 +670,7 @@ export function DashboardView({
 
         {/* P&L bar chart */}
         {pnlData.length >= 2 && (
-          <Card delay={0.35} className="md:col-span-2 xl:col-span-1">
+          <Card delay={0.35} className="xl:col-span-2">
             <CardHeader
               title="Ingresos vs Gastos"
               action={
