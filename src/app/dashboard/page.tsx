@@ -124,8 +124,8 @@ export default async function DashboardPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#0B0F1A] py-8 px-4 pb-24">
-      <div className="max-w-lg mx-auto space-y-5">
+    <div className="min-h-screen bg-[#0B0F1A] py-8 px-4 sm:px-6 pb-24">
+      <div className="max-w-6xl mx-auto space-y-5">
         <h1 className="text-2xl font-semibold text-white">Dashboard</h1>
         <DashboardView
           summary={summary}
