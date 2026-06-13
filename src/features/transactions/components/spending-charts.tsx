@@ -153,7 +153,7 @@ function CategoryPanel({
                 color: comparativa === opt ? C.white : C.muted,
               }}
             >
-              {opt === 'ant' ? 'vs mes ant.' : 'vs media 3m'}
+              {opt === 'ant' ? 'vs ant.' : 'media 3m'}
             </button>
           ))}
         </div>
@@ -327,7 +327,7 @@ export function SpendingCharts({
     <div className="space-y-4">
 
       {/* KPIs */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+      <div className="grid grid-cols-3 gap-4">
         <KpiCard
           label="Total gastado"
           value={currentMonthTotal}
@@ -346,7 +346,7 @@ export function SpendingCharts({
         )}
         <KpiCard
           label="Categorías"
-          value={categoryTotals.length}
+          value={String(categoryTotals.length)}
           sub="con gastos este mes"
           color={C.primary}
           delay={0.12}
@@ -393,12 +393,12 @@ export function SpendingCharts({
 
       {/* Categories + transactions grid */}
       {hasCategoryData && (
-        <div className="grid grid-cols-1 xl:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
           {/* Category panel */}
           <motion.div
             initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }}
             transition={{ delay: 0.25, duration: 0.5 }}
-            className="rounded-2xl p-5 xl:col-span-1"
+            className="rounded-2xl p-5 md:col-span-1"
             style={{ background: C.card, border: `1px solid ${C.border}` }}
           >
             <CategoryPanel
@@ -415,7 +415,7 @@ export function SpendingCharts({
             <motion.div
               initial={{ opacity: 0, y: 24 }} animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.3, duration: 0.5 }}
-              className="rounded-2xl p-5 xl:col-span-2"
+              className="rounded-2xl p-5 md:col-span-2"
               style={{ background: C.card, border: `1px solid ${C.border}` }}
             >
               <p className="text-xs font-semibold uppercase tracking-widest mb-3" style={{ color: C.muted }}>

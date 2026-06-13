@@ -68,8 +68,8 @@ export default async function GastosPage({ searchParams }: { searchParams: Searc
   const total = sumTransactions(txns)
 
   return (
-    <div className="min-h-screen bg-[#0B0F1A] py-8 px-4">
-      <div className="max-w-lg mx-auto space-y-5">
+    <div className="min-h-screen bg-[#0B0F1A] py-8 px-4 sm:px-6">
+      <div className="max-w-4xl mx-auto space-y-5">
 
         <div className="space-y-1">
           <h1 className="text-2xl font-semibold text-white">Gastos</h1>
