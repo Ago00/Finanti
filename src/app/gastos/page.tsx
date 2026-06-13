@@ -1,6 +1,7 @@
 import Link from 'next/link'
 import { requireUser } from '@/lib/auth'
-import { listTransactionsByMonth, listCategories, listGroups, listCategoryTotals, listMonthlyExpenseTotals, getBudgetTotalForMonth } from '@/features/transactions/queries'
+import { listTransactionsByMonth, listCategories, listGroups, listCategoryTotals, listCategoryTotalsByMonths, listMonthlyExpenseTotals, getBudgetTotalForMonth } from '@/features/transactions/queries'
+import type { CategoryTotal } from '@/features/transactions/queries'
 import { sumTransactions } from '@/features/transactions/domain'
 import { MonthPicker } from '@/features/transactions/components/month-picker'
 import { QuickAddForm } from '@/features/transactions/components/quick-add-form'
@@ -32,11 +33,43 @@ export default async function GastosPage({ searchParams }: { searchParams: Searc
   const monthlyTotals = await listMonthlyExpenseTotals()
   const budgetTotal = await getBudgetTotalForMonth(year, month)
 
+  // Fetch the prior 3 months for comparatives
+  const prevMonths: { year: number; month: number }[] = []
+  for (let i = 1; i <= 3; i++) {
+    const d = new Date(Date.UTC(year, month - 1 - i, 1))
+    prevMonths.push({ year: d.getUTCFullYear(), month: d.getUTCMonth() + 1 })
+  }
+  const prevMonthsByMonths = await listCategoryTotalsByMonths(prevMonths)
+  const toKey = (y: number, m: number) => `${y}-${String(m).padStart(2, '0')}`
+  const prevMonthTotals = prevMonthsByMonths[toKey(prevMonths[0].year, prevMonths[0].month)] ?? []
+  const m2Totals = prevMonthsByMonths[toKey(prevMonths[1].year, prevMonths[1].month)] ?? []
+  const m3Totals = prevMonthsByMonths[toKey(prevMonths[2].year, prevMonths[2].month)] ?? []
+
+  // Build 3-month average per category by merging all three months
+  const threeMonthAvgMap = new Map<string, { name: string | null; sum: number; count: number }>()
+  for (const t of [...prevMonthTotals, ...m2Totals, ...m3Totals]) {
+    const key = t.categoryId ?? '__null__'
+    const existing = threeMonthAvgMap.get(key)
+    if (existing) {
+      existing.sum += t.total
+      existing.count += 1
+    } else {
+      threeMonthAvgMap.set(key, { name: t.categoryName, sum: t.total, count: 1 })
+    }
+  }
+  const threeMonthAvgCategoryTotals: CategoryTotal[] = Array.from(threeMonthAvgMap.entries()).map(
+    ([key, v]) => ({
+      categoryId: key === '__null__' ? null : key,
+      categoryName: v.name,
+      total: v.sum / v.count,
+    }),
+  )
+
   const total = sumTransactions(txns)
 
   return (
-    <div className="min-h-screen bg-[#0B0F1A] py-8 px-4">
-      <div className="max-w-lg mx-auto space-y-5">
+    <div className="min-h-screen bg-[#0B0F1A] py-8 px-4 sm:px-6">
+      <div className="max-w-4xl mx-auto space-y-5">
 
         <div className="space-y-1">
           <h1 className="text-2xl font-semibold text-white">Gastos</h1>
@@ -62,6 +95,10 @@ export default async function GastosPage({ searchParams }: { searchParams: Searc
           monthlyTotals={monthlyTotals}
           currentMonthTotal={total}
           budgetTotal={budgetTotal}
+          prevMonthCategoryTotals={prevMonthTotals}
+          threeMonthAvgCategoryTotals={threeMonthAvgCategoryTotals}
+          year={year}
+          month={month}
         />
 
         <QuickAddForm categories={categories} groups={groups} />

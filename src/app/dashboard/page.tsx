@@ -1,5 +1,5 @@
 import { requireUser } from '@/lib/auth'
-import { getDashboardRaw, getDashboardBudgetLines, getMonthlyPnlData } from '@/features/dashboard/queries'
+import { getDashboardRaw, getDashboardBudgetLines, getMonthlyPnlData, getMonthlyContributions } from '@/features/dashboard/queries'
 import {
   computeAccountSummary,
   computeTotals,
@@ -24,6 +24,7 @@ export default async function DashboardPage() {
   const raw = await getDashboardRaw()
   const budgetLines = await getDashboardBudgetLines(currentMonthStart, currentMonthEnd)
   const monthlyPnl = await getMonthlyPnlData()
+  const monthlyContributions = await getMonthlyContributions()
 
   // Group last 2 snapshots per account
   const snapshotsByAccount = new Map<string, typeof raw.recentSnapshots>()
@@ -88,6 +89,16 @@ export default async function DashboardPage() {
 
   const currentMonthLabel = formatMonthLabel(currentYear, currentMonth)
 
+  // % change in total patrimony vs the previous month
+  const sortedEvolution = [...allEvolution].sort((a, b) => a.month.localeCompare(b.month))
+  const patrimonioChangePct: number | null = (() => {
+    if (sortedEvolution.length < 2) return null
+    const prev = sortedEvolution[sortedEvolution.length - 2].total
+    const curr = sortedEvolution[sortedEvolution.length - 1].total
+    if (prev === 0) return null
+    return Math.round(((curr - prev) / prev) * 10000) / 100
+  })()
+
   // Budget analysis
   const budgetAnalysis = budgetLines.length > 0
     ? computeDashboardBudgetSummary(budgetLines)
@@ -112,17 +123,14 @@ export default async function DashboardPage() {
     monthlyPnl,
   }
 
-  const displayYear = latestMonth ? latestMonth.getUTCFullYear() : now.getUTCFullYear()
-  const displayMonth = latestMonth ? latestMonth.getUTCMonth() + 1 : currentMonth
-
   return (
-    <div className="min-h-screen bg-[#0B0F1A] py-8 px-4 pb-24">
-      <div className="max-w-lg mx-auto space-y-5">
+    <div className="min-h-screen bg-[#0B0F1A] py-8 px-4 sm:px-6 pb-24">
+      <div className="max-w-6xl mx-auto space-y-5">
         <h1 className="text-2xl font-semibold text-white">Dashboard</h1>
         <DashboardView
           summary={summary}
-          year={displayYear}
-          month={displayMonth}
+          patrimonioChangePct={patrimonioChangePct}
+          monthlyContributions={monthlyContributions}
           budgetWidget={
             <BudgetSummaryWidget
               analysis={budgetAnalysis}
