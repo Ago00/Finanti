@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-06-13 — Ajustes de layout y UX post-rediseño v2
+**Tipo:** Mejora
+Correcciones visuales tras revisión en preview. Dashboard: contenedor ampliado a `max-w-6xl`; "Mis cuentas" ocupa todo el ancho y "Distribución" + "Ingresos vs Gastos" comparten fila sin huecos. Gastos: contenedor ampliado a `max-w-4xl`; eje Y del gráfico de evolución con etiquetas en €; etiqueta de barra activa en euros; barra de presupuesto vertical que se estira a toda la altura de la tarjeta; categorías con 2/3 del ancho y presupuesto con 1/3; KPI "Categorías" muestra número sin símbolo €; toggle sin saltos de línea. Patrimonio: contenedor ampliado a `max-w-3xl`.
+
 ## 2026-06-08 — Rediseño visual v2: Dashboard, Gastos y Patrimonio
 **Tipo:** Feature
 Las tres secciones principales de la app estrenan diseño v2: gráficos enriquecidos, comparativas por categoría respecto al mes anterior y media de 3 meses, y desglose patrimonial con variación mensual.
