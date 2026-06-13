@@ -46,9 +46,13 @@ function EvolucionBars({
         {[0.25, 0.5, 0.75, 1].map(t => (
           <div
             key={t}
-            className="absolute left-0 right-0 pointer-events-none"
+            className="absolute left-0 right-0 pointer-events-none flex items-end pb-0.5"
             style={{ bottom: `${t * 100}%`, borderTop: `1px solid ${C.border}` }}
-          />
+          >
+            <span className="text-[8px] tabular-nums leading-none" style={{ color: C.muted }}>
+              {Math.round(t * maxVal).toLocaleString('es-ES')} €
+            </span>
+          </div>
         ))}
 
         {pptoY !== null && (
@@ -80,7 +84,7 @@ function EvolucionBars({
                       className="absolute text-[9px] font-bold tabular-nums"
                       style={{ bottom: barH + 3, color: over ? C.rose : C.primaryLit }}
                     >
-                      {(t.total / 1000).toFixed(1)}k
+                      {formatCurrency(t.total)}
                     </motion.span>
                   )}
                 </AnimatePresence>
