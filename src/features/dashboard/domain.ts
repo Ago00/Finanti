@@ -35,7 +35,14 @@ export type DashboardSummary = {
   currentYear: number
   currentMonth: number
   currentMonthLabel: string
+  currentMonthLabelShort: string
+  previousMonthLabelShort: string
   monthlyPnl: MonthlyPnlPoint[]
+  previousMonthIncome: number | null
+  currentMonthInvestments: number
+  // Derived: previousMonthIncome - plannedExpenses - Σ(planned investment lines).
+  // null when no budget plan exists for the current month.
+  plannedSavings: number | null
 }
 
 export function computeAccountSummary(

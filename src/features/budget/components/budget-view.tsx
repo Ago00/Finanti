@@ -1,6 +1,7 @@
 import type { BudgetAnalysis, BudgetLine } from '@/features/budget/domain'
 import { BudgetLineEdit } from './budget-line-edit'
 import { formatCurrency } from '@/lib/formatting'
+import { formatMonthLabel } from '@/lib/dates'
 
 function BudgetLineRow({ line }: { line: BudgetLine }) {
   return (
@@ -68,9 +69,14 @@ export function BudgetView({ analysis }: { analysis: BudgetAnalysis }) {
       </div>
 
       {!hasLines && (
-        <p className="text-[#64748B] text-sm text-center py-6">
-          No hay presupuesto definido para este mes. Cierra el mes desde Recap.
-        </p>
+        <div className="rounded-xl bg-[#141925] border border-[#1E2A3A] px-5 py-8 text-center space-y-1">
+          <p className="text-[#94A3B8] text-sm font-medium">
+            Sin presupuesto para {formatMonthLabel(analysis.month.getUTCFullYear(), analysis.month.getUTCMonth() + 1)}
+          </p>
+          <p className="text-[#64748B] text-xs">
+            Añade tus categorías de gasto e inversiones desde Ajustes para que aparezcan aquí.
+          </p>
+        </div>
       )}
 
       {/* Gastos section */}

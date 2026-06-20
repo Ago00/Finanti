@@ -1,5 +1,5 @@
 import { db } from '@/lib/db'
-import { accounts, monthlySnapshots, transactions, incomes, budgets, categories, assetClasses } from '@/db/schema'
+import { accounts, monthlySnapshots, transactions, incomes, budgets, categories, assetClasses, investmentExecutions } from '@/db/schema'
 import { eq, and, gte, lt, isNull, isNotNull, desc, sum, sql } from 'drizzle-orm'
 
 export type DashboardRaw = {
@@ -185,6 +185,51 @@ export async function getDashboardBudgetLines(
     assetClassName: row.assetClassName ?? null,
     assetClassColor: row.assetClassColor ?? null,
   }))
+}
+
+// ─── Previous month income (for savings calculation) ─────────────────────────
+
+export async function getPreviousMonthIncome(): Promise<number | null> {
+  const now = new Date()
+  const prevMonthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1))
+  const prevMonthEnd = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1))
+
+  const rows = await db
+    .select({ total: sum(incomes.amount) })
+    .from(incomes)
+    .where(
+      and(
+        gte(incomes.budgetMonth, prevMonthStart),
+        lt(incomes.budgetMonth, prevMonthEnd),
+        isNull(incomes.archivedAt),
+      ),
+    )
+
+  const total = rows[0]?.total
+  if (total === null || total === undefined) return null
+  const parsed = Number(total)
+  return parsed === 0 ? null : parsed
+}
+
+// ─── Current month investment executions total ────────────────────────────────
+
+export async function getCurrentMonthInvestmentsTotal(): Promise<number> {
+  const now = new Date()
+  const currentMonthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1))
+  const currentMonthEnd = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 1))
+
+  const rows = await db
+    .select({ total: sum(investmentExecutions.amount) })
+    .from(investmentExecutions)
+    .where(
+      and(
+        gte(investmentExecutions.month, currentMonthStart),
+        lt(investmentExecutions.month, currentMonthEnd),
+        isNull(investmentExecutions.archivedAt),
+      ),
+    )
+
+  return Number(rows[0]?.total ?? 0)
 }
 
 // ─── Monthly contributions cumulative (for evolution chart) ──────────────────

@@ -194,12 +194,15 @@ function IncomeEntryRow({ entry, incomeSources }: IncomeRowProps) {
   )
 }
 
-export function IncomesList({ entries, incomeSources }: Props) {
+export function IncomesList({ entries, year, month, incomeSources }: Props) {
   if (entries.length === 0) {
     return (
-      <div className="rounded-xl bg-[#141925] border border-[#1E2A3A] px-5 py-8 text-center">
-        <p className="text-[#64748B] text-sm">
-          No hay ingresos registrados para este mes. Ciérralos desde Recap.
+      <div className="rounded-xl bg-[#141925] border border-[#1E2A3A] px-5 py-8 text-center space-y-1">
+        <p className="text-[#94A3B8] text-sm font-medium">
+          Sin ingresos para {format(new Date(year, month - 1, 1), 'MMMM yyyy', { locale: es })}
+        </p>
+        <p className="text-[#64748B] text-xs">
+          Registra un ingreso con el botón + de arriba.
         </p>
       </div>
     )

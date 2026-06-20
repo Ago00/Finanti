@@ -41,7 +41,11 @@
       "unrs-resolver",
       "esbuild",
       "msw"
-    ]
+    ],
+    "overrides": {
+      "esbuild": ">=0.28.1",
+      "vite": ">=8.0.16"
+    }
   },
   "devDependencies": {
     "@tailwindcss/postcss": "^4",

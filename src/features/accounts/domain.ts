@@ -1,3 +1,64 @@
+// ─── Snapshot computation (moved from features/recap) ─────────────────────────
+
+export type GainMode = 'auto' | 'manual' | 'projects'
+
+export type SnapshotAccountInput = {
+  id: string
+  name: string
+  gainMode: GainMode
+  openingBalance: number
+  contributions: number
+  closingBalance: number
+  gainManual?: number | null
+}
+
+export type SnapshotResult = {
+  gain: number
+  gainPercentage: number
+}
+
+export type RecapSummary = {
+  totalClosingBalance: number
+  totalGain: number
+  totalContributions: number
+}
+
+export function computeSnapshot(input: SnapshotAccountInput): SnapshotResult {
+  let gain: number
+
+  if (input.gainMode === 'auto') {
+    gain = input.closingBalance - input.openingBalance - input.contributions
+  } else if (input.gainMode === 'manual') {
+    gain = input.gainManual ?? 0
+  } else {
+    gain = 0
+  }
+
+  const gainPercentage =
+    input.openingBalance === 0 ? 0 : (gain / input.openingBalance) * 100
+
+  return { gain, gainPercentage }
+}
+
+export function computeRecapSummary(inputs: SnapshotAccountInput[]): RecapSummary {
+  const totalClosingBalance = inputs.reduce((sum, i) => sum + i.closingBalance, 0)
+  const totalGain = inputs.reduce((sum, i) => sum + computeSnapshot(i).gain, 0)
+  const totalContributions = inputs.reduce((sum, i) => sum + i.contributions, 0)
+
+  return { totalClosingBalance, totalGain, totalContributions }
+}
+
+export function computeOpeningBalancesForNewMonth(
+  previousSnapshots: { accountId: string; closingBalance: number }[],
+): { accountId: string; openingBalance: number }[] {
+  return previousSnapshots.map((s) => ({
+    accountId: s.accountId,
+    openingBalance: s.closingBalance,
+  }))
+}
+
+// ─── Gain mode labels ─────────────────────────────────────────────────────────
+
 export const GAIN_MODE_LABELS: Record<'auto' | 'manual' | 'projects', string> = {
   auto: 'Auto',
   manual: 'Manual',

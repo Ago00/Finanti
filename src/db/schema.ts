@@ -168,6 +168,30 @@ export const budgets = pgTable('budgets', {
   ...timestamps,
 })
 
+// ─── Investment executions ────────────────────────────────────────────────────
+
+export const investmentExecutions = pgTable('investment_executions', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  month: timestamp('month', { withTimezone: true }).notNull(),
+  assetClassId: uuid('asset_class_id').references(() => assetClasses.id),
+  budgetId: uuid('budget_id').references(() => budgets.id),
+  amount: numeric('amount', { precision: 12, scale: 2 }).notNull(),
+  executedAt: timestamp('executed_at', { withTimezone: true }).notNull().defaultNow(),
+  description: text('description'),
+  ...timestamps,
+})
+
+// ─── Monthly budget meta ──────────────────────────────────────────────────────
+
+export const monthlyBudgetMeta = pgTable('monthly_budget_meta', {
+  id: uuid('id').primaryKey().defaultRandom(),
+  month: timestamp('month', { withTimezone: true }).notNull().unique(),
+  // planned_savings removed — ahorro is always derived: income_prev_month - planned_expenses - Σ_investment_lines
+  plannedExpenses: numeric('planned_expenses', { precision: 12, scale: 2 }),
+  createdAt: timestamp('created_at', { withTimezone: true }).defaultNow().notNull(),
+  updatedAt: timestamp('updated_at', { withTimezone: true }).defaultNow().notNull(),
+})
+
 // ─── Civislend projects ───────────────────────────────────────────────────────
 
 export const civislendProjects = pgTable('civislend_projects', {

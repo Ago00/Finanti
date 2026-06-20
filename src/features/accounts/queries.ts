@@ -215,6 +215,16 @@ export type ExpenseByAccountMonth = {
 // Total expense per account and calendar month, derived from transactions tied
 // to an account. Accounts without transactions simply don't appear here, so the
 // caller must default their expense to 0.
+export type ActiveAccountOption = { id: string; name: string }
+
+export async function getActiveAccountOptions(): Promise<ActiveAccountOption[]> {
+  return db
+    .select({ id: accounts.id, name: accounts.name })
+    .from(accounts)
+    .where(isNull(accounts.archivedAt))
+    .orderBy(asc(accounts.sortOrder))
+}
+
 export async function listExpensesByAccountMonth(): Promise<ExpenseByAccountMonth[]> {
   function pad(n: number): string {
     return n < 10 ? `0${n}` : `${n}`

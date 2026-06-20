@@ -1,5 +1,15 @@
 // ─── Types ────────────────────────────────────────────────────────────────────
 
+export type InvestmentLine = {
+  id: string
+  assetClassId: string | null
+  assetClassName: string | null
+  plannedAmount: number
+  isConfirmed: boolean
+  executedAt: Date | null
+  budgetId: string | null
+}
+
 export type BudgetLineInput = {
   label: string
   color: string

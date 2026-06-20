@@ -1,8 +1,8 @@
-import Link from 'next/link'
 import { requireUser } from '@/lib/auth'
 import { listIncomesByBudgetMonth } from '@/features/incomes/queries'
-import { IncomesList } from '@/features/incomes/components/incomes-list'
 import { listIncomeSources } from '@/features/income-sources/queries'
+import { getActiveAccountOptions } from '@/features/accounts/queries'
+import { IncomesView } from '@/features/incomes/components/incomes-view'
 import { formatMonthLabel } from '@/lib/dates'
 
 type SearchParams = Promise<{ year?: string; month?: string }>
@@ -18,6 +18,7 @@ export default async function IngresosPage({ searchParams }: { searchParams: Sea
   // Sequential execution to avoid PgBouncer transaction-mode connection exhaustion
   const entries = await listIncomesByBudgetMonth(year, month)
   const incomeSources = await listIncomeSources()
+  const accounts = await getActiveAccountOptions()
 
   const prevMonth = month === 1 ? 12 : month - 1
   const prevYear  = month === 1 ? year - 1 : year
@@ -27,36 +28,18 @@ export default async function IngresosPage({ searchParams }: { searchParams: Sea
     (year === now.getUTCFullYear() && month > now.getUTCMonth() + 1)
 
   return (
-    <div className="min-h-screen bg-[#0B0F1A] py-8 px-4 pb-24">
-      <div className="max-w-lg mx-auto space-y-5">
-        <Link href="/dashboard" className="flex items-center gap-1 text-sm text-[#64748B] hover:text-[#94A3B8]">
-          ← Volver
-        </Link>
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-2xl font-semibold text-white">Ingresos</h1>
-            <p className="text-[#94A3B8] text-sm mt-0.5">{formatMonthLabel(year, month)}</p>
-          </div>
-          <div className="flex items-center gap-1">
-            <Link
-              href={`/ingresos?year=${prevYear}&month=${prevMonth}`}
-              className="text-[#64748B] hover:text-white px-2"
-            >
-              ←
-            </Link>
-            {disableNext
-              ? <span className="text-[#64748B] px-2 opacity-40 cursor-not-allowed">→</span>
-              : <Link
-                  href={`/ingresos?year=${nextYear}&month=${nextMonth}`}
-                  className="text-[#64748B] hover:text-white px-2"
-                >
-                  →
-                </Link>
-            }
-          </div>
-        </div>
-        <IncomesList entries={entries} year={year} month={month} incomeSources={incomeSources} />
-      </div>
-    </div>
+    <IncomesView
+      entries={entries}
+      year={year}
+      month={month}
+      monthLabel={formatMonthLabel(year, month)}
+      incomeSources={incomeSources.map(s => ({ id: s.id, name: s.name, color: s.color }))}
+      accounts={accounts}
+      prevYear={prevYear}
+      prevMonth={prevMonth}
+      nextYear={nextYear}
+      nextMonth={nextMonth}
+      disableNext={disableNext}
+    />
   )
 }

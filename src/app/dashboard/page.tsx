@@ -1,5 +1,12 @@
 import { requireUser } from '@/lib/auth'
-import { getDashboardRaw, getDashboardBudgetLines, getMonthlyPnlData, getMonthlyContributions } from '@/features/dashboard/queries'
+import {
+  getDashboardRaw,
+  getDashboardBudgetLines,
+  getMonthlyPnlData,
+  getMonthlyContributions,
+  getPreviousMonthIncome,
+  getCurrentMonthInvestmentsTotal,
+} from '@/features/dashboard/queries'
 import {
   computeAccountSummary,
   computeTotals,
@@ -10,6 +17,7 @@ import type { DashboardSummary, EvolutionPoint, AccountSummary } from '@/feature
 import { DashboardView } from '@/features/dashboard/components/dashboard-view'
 import { BudgetSummaryWidget } from '@/features/dashboard/components/budget-summary-widget'
 import { formatMonthLabel } from '@/lib/dates'
+import { getMonthlyBudgetMeta } from '@/features/budget/queries'
 
 export default async function DashboardPage() {
   await requireUser()
@@ -19,12 +27,27 @@ export default async function DashboardPage() {
   const currentMonth = now.getUTCMonth() + 1
   const currentMonthStart = new Date(Date.UTC(currentYear, currentMonth - 1, 1))
   const currentMonthEnd = new Date(Date.UTC(currentYear, currentMonth, 1))
+  const prevMonthYear = currentMonth === 1 ? currentYear - 1 : currentYear
+  const prevMonthNum = currentMonth === 1 ? 12 : currentMonth - 1
 
   // Sequential execution to avoid PgBouncer transaction-mode connection exhaustion
   const raw = await getDashboardRaw()
   const budgetLines = await getDashboardBudgetLines(currentMonthStart, currentMonthEnd)
   const monthlyPnl = await getMonthlyPnlData()
   const monthlyContributions = await getMonthlyContributions()
+  const previousMonthIncome = await getPreviousMonthIncome()
+  const currentMonthInvestments = await getCurrentMonthInvestmentsTotal()
+  const budgetMeta = await getMonthlyBudgetMeta(currentMonthStart)
+
+  // plannedSavings is derived: prev month income - planned expenses - Σ planned investment lines.
+  // Only set when the user has saved a budget plan (plannedExpenses exists in meta).
+  const plannedSavings: number | null = (() => {
+    if (budgetMeta?.plannedExpenses == null || previousMonthIncome == null) return null
+    const plannedInvestments = budgetLines
+      .filter(l => l.assetClassId != null)
+      .reduce((s, l) => s + l.plannedAmount, 0)
+    return previousMonthIncome - budgetMeta.plannedExpenses - plannedInvestments
+  })()
 
   // Group last 2 snapshots per account
   const snapshotsByAccount = new Map<string, typeof raw.recentSnapshots>()
@@ -89,6 +112,14 @@ export default async function DashboardPage() {
 
   const currentMonthLabel = formatMonthLabel(currentYear, currentMonth)
 
+  // Short labels for widgets
+  const currentMonthLabelShort = new Date(Date.UTC(currentYear, currentMonth - 1, 1))
+    .toLocaleDateString('es-ES', { month: 'long', timeZone: 'UTC' })
+    .replace(/^\w/, c => c.toUpperCase())
+  const previousMonthLabelShort = new Date(Date.UTC(prevMonthYear, prevMonthNum - 1, 1))
+    .toLocaleDateString('es-ES', { month: 'long', timeZone: 'UTC' })
+    .replace(/^\w/, c => c.toUpperCase())
+
   // % change in total patrimony vs the previous month
   const sortedEvolution = [...allEvolution].sort((a, b) => a.month.localeCompare(b.month))
   const patrimonioChangePct: number | null = (() => {
@@ -120,7 +151,12 @@ export default async function DashboardPage() {
     currentYear,
     currentMonth,
     currentMonthLabel,
+    currentMonthLabelShort,
+    previousMonthLabelShort,
     monthlyPnl,
+    previousMonthIncome,
+    currentMonthInvestments,
+    plannedSavings,
   }
 
   return (

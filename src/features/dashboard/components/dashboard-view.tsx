@@ -3,10 +3,11 @@
 import { useState, useRef, useEffect, type ReactNode } from 'react'
 import Link from 'next/link'
 import { motion, AnimatePresence, useInView, useMotionValue, animate } from 'motion/react'
-import { ArrowUpRight, ArrowDownRight, ChevronRight, Wallet } from 'lucide-react'
+import { ArrowUpRight, ArrowDownRight, ChevronRight, Wallet, TrendingUp, Info } from 'lucide-react'
 import type { DashboardSummary } from '@/features/dashboard/domain'
 import type { MonthlyContribution } from '@/features/dashboard/queries'
 import { formatCurrency } from '@/lib/formatting'
+import { calculateActualSavings } from '@/lib/savings'
 
 // ─── Design tokens (aligned with mockup) ─────────────────────────────────────
 const C = {
@@ -486,6 +487,368 @@ function StatCard({
   )
 }
 
+// ─── Tooltip ──────────────────────────────────────────────────────────────────
+function Tooltip({ text, children }: { text: string; children: ReactNode }) {
+  const [open, setOpen] = useState(false)
+  return (
+    <div className="relative inline-flex">
+      <div onMouseEnter={() => setOpen(true)} onMouseLeave={() => setOpen(false)}>
+        {children}
+      </div>
+      <AnimatePresence>
+        {open && (
+          <motion.div
+            initial={{ opacity: 0, y: 4, scale: 0.95 }}
+            animate={{ opacity: 1, y: 0, scale: 1 }}
+            exit={{ opacity: 0, y: 4, scale: 0.95 }}
+            transition={{ duration: 0.15 }}
+            className="absolute bottom-full left-1/2 -translate-x-1/2 mb-2 w-56 rounded-xl px-3 py-2.5 text-xs z-50"
+            style={{
+              background: C.glass,
+              border: `1px solid ${C.border}`,
+              backdropFilter: 'blur(12px)',
+              color: C.text2,
+              boxShadow: '0 8px 32px rgba(0,0,0,0.5)',
+            }}
+          >
+            {text}
+            <div
+              className="absolute top-full left-1/2 -translate-x-1/2 border-4 border-transparent"
+              style={{ borderTopColor: C.border }}
+            />
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </div>
+  )
+}
+
+// ─── Mini bar chart for savings history ───────────────────────────────────────
+type SavingsHistoryPoint = { mes: string; proyectado: number; ejecutado: number }
+
+function SavingsHistoryChart({ data }: { data: SavingsHistoryPoint[] }) {
+  const maxV = Math.max(...data.flatMap(d => [d.proyectado, d.ejecutado])) * 1.1 || 1
+  const BAR_H = 72
+
+  return (
+    <div className="flex items-end gap-1.5 w-full" style={{ height: BAR_H + 24 }}>
+      {data.map((d, i) => {
+        const hProj = Math.round((d.proyectado / maxV) * BAR_H)
+        const hExec = Math.round((d.ejecutado  / maxV) * BAR_H)
+        const isLast = i === data.length - 1
+        return (
+          <div key={d.mes} className="flex-1 flex flex-col items-center gap-1" style={{ justifyContent: 'flex-end' }}>
+            <div className="relative flex items-end gap-0.5 w-full justify-center">
+              <motion.div
+                initial={{ height: 0 }}
+                animate={{ height: hProj }}
+                transition={{ duration: 0.6, delay: i * 0.06, ease: [0.16, 1, 0.3, 1] }}
+                className="w-2 rounded-t-sm"
+                style={{ background: isLast ? `${C.primary}60` : C.faint, border: isLast ? `1px solid ${C.primary}` : 'none' }}
+              />
+              <motion.div
+                initial={{ height: 0 }}
+                animate={{ height: hExec }}
+                transition={{ duration: 0.6, delay: i * 0.06 + 0.05, ease: [0.16, 1, 0.3, 1] }}
+                className="w-2 rounded-t-sm"
+                style={{
+                  background: isLast
+                    ? d.ejecutado >= d.proyectado ? C.emerald : C.amber
+                    : d.ejecutado >= d.proyectado ? `${C.emerald}50` : `${C.amber}50`,
+                }}
+              />
+            </div>
+            <span className="text-[9px] tabular-nums" style={{ color: isLast ? C.text2 : C.muted }}>
+              {d.mes}
+            </span>
+          </div>
+        )
+      })}
+    </div>
+  )
+}
+
+// ─── Widget Ingresos ──────────────────────────────────────────────────────────
+function WidgetIngresos({
+  previousMonthIncome,
+  currentMonthIncome,
+  previousMonthLabel,
+  currentMonthLabel,
+}: {
+  previousMonthIncome: number | null
+  currentMonthIncome: number
+  previousMonthLabel: string
+  currentMonthLabel: string
+}) {
+  const ref = useRef<HTMLDivElement>(null)
+  const inView = useInView(ref, { once: true, margin: '-10px' })
+
+  return (
+    <motion.div
+      ref={ref}
+      initial={{ opacity: 0, y: 20 }}
+      animate={inView ? { opacity: 1, y: 0 } : {}}
+      transition={{ duration: 0.55, delay: 0.05, ease: [0.16, 1, 0.3, 1] }}
+      whileHover={{ y: -1 }}
+      className="rounded-2xl p-5"
+      style={{ background: C.card, border: `1px solid ${C.border}` }}
+    >
+      <div className="flex items-center justify-between mb-5">
+        <p className="text-xs font-semibold uppercase tracking-widest" style={{ color: C.muted }}>
+          Ingresos
+        </p>
+        <div className="flex items-center gap-2">
+          <Tooltip text={`${previousMonthLabel} alimenta el cálculo de ahorro de este mes.`}>
+            <Info size={13} style={{ color: C.muted, cursor: 'help' }} />
+          </Tooltip>
+          <div className="w-8 h-8 rounded-xl flex items-center justify-center" style={{ background: `${C.emerald}18` }}>
+            <TrendingUp size={15} style={{ color: C.emerald }} />
+          </div>
+        </div>
+      </div>
+
+      {/* Previous month — main reference */}
+      <div className="mb-1">
+        <div className="flex items-center gap-1.5 mb-2">
+          <span className="w-1.5 h-1.5 rounded-full flex-shrink-0" style={{ background: C.emerald }} />
+          <p className="text-[10px] font-semibold uppercase tracking-wider" style={{ color: C.emerald }}>
+            {previousMonthLabel} — referencia
+          </p>
+        </div>
+        <p className="text-4xl font-bold tabular-nums leading-none" style={{ color: C.white }}>
+          {inView
+            ? <AnimatedNumber value={previousMonthIncome ?? 0} decimals={2} duration={1.0} color={C.white} />
+            : '—'}
+        </p>
+        {previousMonthIncome === null && (
+          <p className="text-xs mt-1.5" style={{ color: C.muted }}>Sin datos del mes anterior</p>
+        )}
+        {previousMonthIncome !== null && (
+          <p className="text-xs mt-1.5" style={{ color: C.muted }}>Alimenta el presupuesto de este mes</p>
+        )}
+      </div>
+
+      <div className="my-4" style={{ borderTop: `1px solid ${C.border}` }} />
+
+      {/* Current month — secondary */}
+      <div className="flex items-center justify-between">
+        <div>
+          <div className="flex items-center gap-1.5 mb-1">
+            <span className="w-1 h-1 rounded-full flex-shrink-0" style={{ background: C.faint }} />
+            <p className="text-[10px] uppercase tracking-wider" style={{ color: C.muted }}>
+              {currentMonthLabel} (en curso)
+            </p>
+          </div>
+          <p className="text-xl font-semibold tabular-nums" style={{ color: C.text2 }}>
+            {inView
+              ? <AnimatedNumber value={currentMonthIncome} decimals={2} duration={1.1} color={C.text2} />
+              : '—'}
+          </p>
+        </div>
+        <p className="text-xs text-right" style={{ color: C.muted }}>
+          Lo que ha<br />entrado hasta hoy
+        </p>
+      </div>
+
+      <Link href="/ingresos" className="mt-4 w-full flex items-center justify-center gap-1.5 text-xs py-2" style={{ color: C.muted }}>
+        Ver detalle de ingresos
+        <ChevronRight size={12} />
+      </Link>
+    </motion.div>
+  )
+}
+
+// ─── Widget Ahorro ────────────────────────────────────────────────────────────
+function WidgetAhorro({
+  plannedSavings,
+  actualSavings,
+  previousMonthIncome,
+  previousMonthLabel,
+  monthlyPnl,
+}: {
+  plannedSavings: number | null
+  actualSavings: number | null
+  previousMonthIncome: number | null
+  previousMonthLabel: string
+  monthlyPnl: { month: string; income: number; expenses: number; invGain: number }[]
+}) {
+  const [showHistorico, setShowHistorico] = useState(false)
+  const ref = useRef<HTMLDivElement>(null)
+  const inView = useInView(ref, { once: true, margin: '-10px' })
+
+  // Build savings history from pnl data (last 6 months)
+  const savingsHistory: SavingsHistoryPoint[] = monthlyPnl.slice(-6).map((p, i, arr) => {
+    const prevIncome = i > 0 ? arr[i - 1].income : null
+    const execSavings = prevIncome !== null ? prevIncome - p.expenses - p.invGain : 0
+    return {
+      mes: p.month.slice(5),
+      proyectado: plannedSavings ?? 0,
+      ejecutado: Math.max(0, execSavings),
+    }
+  })
+
+  const diffAhorro = actualSavings !== null && plannedSavings !== null
+    ? actualSavings - plannedSavings
+    : null
+  const positive = (diffAhorro ?? 0) >= 0
+
+  const refIncomeRatio = previousMonthIncome && previousMonthIncome > 0
+
+  return (
+    <motion.div
+      ref={ref}
+      initial={{ opacity: 0, y: 20 }}
+      animate={inView ? { opacity: 1, y: 0 } : {}}
+      transition={{ duration: 0.55, delay: 0.1, ease: [0.16, 1, 0.3, 1] }}
+      whileHover={{ y: -1 }}
+      className="rounded-2xl p-5"
+      style={{ background: C.card, border: `1px solid ${C.border}` }}
+    >
+      <div className="flex items-center justify-between mb-5">
+        <p className="text-xs font-semibold uppercase tracking-widest" style={{ color: C.muted }}>
+          Ahorro del mes
+        </p>
+        <div className="flex items-center gap-2">
+          <Tooltip text={`Calculado con ingresos de ${previousMonthLabel}. Fórmula: ingresos anterior − gastos − inversiones.`}>
+            <button
+              className="w-6 h-6 rounded-lg flex items-center justify-center"
+              style={{ background: C.faint }}
+            >
+              <Info size={12} style={{ color: C.text2 }} />
+            </button>
+          </Tooltip>
+          <div className="w-8 h-8 rounded-xl flex items-center justify-center" style={{ background: `${C.primary}18` }}>
+            <Wallet size={15} style={{ color: C.primary }} />
+          </div>
+        </div>
+      </div>
+
+      {/* Projected vs actual */}
+      <div className="grid grid-cols-2 gap-3 mb-5">
+        <div
+          className="rounded-xl px-3 py-3"
+          style={{ background: `${C.primary}10`, border: `1px solid ${C.primary}20` }}
+        >
+          <p className="text-[9px] font-medium uppercase tracking-wider mb-1.5" style={{ color: C.primaryLit }}>
+            Presupuesto
+          </p>
+          <p className="text-lg font-bold tabular-nums" style={{ color: C.white, lineHeight: 1.2 }}>
+            {plannedSavings !== null
+              ? (inView ? <AnimatedNumber value={plannedSavings} decimals={2} duration={0.9} color={C.white} /> : '—')
+              : <span style={{ color: C.muted }}>—</span>}
+          </p>
+          {refIncomeRatio && plannedSavings !== null && (
+            <div className="flex items-center gap-1 mt-1">
+              <div className="w-1.5 h-1.5 rounded-full" style={{ background: C.primary }} />
+              <p className="text-[10px]" style={{ color: C.muted }}>
+                {Math.round((plannedSavings / previousMonthIncome!) * 100)}% de ingresos
+              </p>
+            </div>
+          )}
+        </div>
+
+        <div
+          className="rounded-xl px-3 py-3"
+          style={{ background: `${C.emerald}08`, border: `1px solid ${C.emerald}20` }}
+        >
+          <p className="text-[9px] font-medium uppercase tracking-wider mb-1.5" style={{ color: C.emerald }}>
+            Realidad
+          </p>
+          <p className="text-lg font-bold tabular-nums" style={{ color: C.white, lineHeight: 1.2 }}>
+            {actualSavings !== null
+              ? (inView ? <AnimatedNumber value={actualSavings} decimals={2} duration={1.0} color={C.white} /> : '—')
+              : <span style={{ color: C.muted }}>Sin datos</span>}
+          </p>
+          {refIncomeRatio && actualSavings !== null && (
+            <div className="flex items-center gap-1 mt-1">
+              <div className="w-1.5 h-1.5 rounded-full" style={{ background: C.emerald }} />
+              <p className="text-[10px]" style={{ color: C.muted }}>
+                {Math.round((actualSavings / previousMonthIncome!) * 100)}% de ingresos
+              </p>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Progress bar */}
+      {plannedSavings !== null && actualSavings !== null && (
+        <div className="mb-4">
+          <div className="flex justify-between text-[10px] mb-1.5" style={{ color: C.muted }}>
+            <span>Ejecución del ahorro</span>
+            {diffAhorro !== null && (
+              <span style={{ color: positive ? C.emerald : C.amber }}>
+                {positive ? '+' : ''}{formatCurrency(diffAhorro)}
+              </span>
+            )}
+          </div>
+          <div className="relative h-2 rounded-full overflow-hidden" style={{ background: C.faint }}>
+            <motion.div
+              className="absolute left-0 top-0 h-full rounded-full"
+              style={{ background: `linear-gradient(90deg, ${C.primary}, ${C.emerald})` }}
+              initial={{ width: 0 }}
+              animate={{
+                width: `${Math.min((actualSavings / (plannedSavings || 1)) * 100, 100)}%`,
+              }}
+              transition={{ duration: 0.9, delay: 0.3, ease: [0.16, 1, 0.3, 1] }}
+            />
+          </div>
+        </div>
+      )}
+
+      {/* History toggle */}
+      <button
+        onClick={() => setShowHistorico(v => !v)}
+        className="w-full flex items-center justify-between text-xs py-2 px-0"
+        style={{ color: C.muted }}
+      >
+        <span className="flex items-center gap-1.5">
+          <ArrowUpRight size={12} style={{ color: C.primary }} />
+          Ver histórico de ahorro
+        </span>
+        <motion.span animate={{ rotate: showHistorico ? 90 : 0 }} transition={{ duration: 0.2 }}>
+          <ChevronRight size={12} />
+        </motion.span>
+      </button>
+
+      <AnimatePresence>
+        {showHistorico && (
+          <motion.div
+            initial={{ opacity: 0, height: 0 }}
+            animate={{ opacity: 1, height: 'auto' }}
+            exit={{ opacity: 0, height: 0 }}
+            transition={{ duration: 0.3, ease: [0.16, 1, 0.3, 1] }}
+            className="overflow-hidden"
+          >
+            <div className="pt-4 border-t mt-3" style={{ borderColor: C.border }}>
+              <p className="text-[10px] uppercase tracking-wider mb-3" style={{ color: C.muted }}>
+                Últimos {savingsHistory.length} meses
+              </p>
+              {savingsHistory.length >= 2 && (
+                <>
+                  <SavingsHistoryChart data={savingsHistory} />
+                  <div className="flex items-center gap-4 mt-2">
+                    <div className="flex items-center gap-1.5">
+                      <div className="w-3 h-1.5 rounded-sm" style={{ background: C.faint }} />
+                      <span className="text-[10px]" style={{ color: C.muted }}>Presupuesto</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <div className="w-3 h-1.5 rounded-sm" style={{ background: C.emerald }} />
+                      <span className="text-[10px]" style={{ color: C.muted }}>Realidad</span>
+                    </div>
+                  </div>
+                </>
+              )}
+              {savingsHistory.length < 2 && (
+                <p className="text-xs" style={{ color: C.muted }}>No hay histórico suficiente aún.</p>
+              )}
+            </div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+    </motion.div>
+  )
+}
+
 // ─── Main component ───────────────────────────────────────────────────────────
 export function DashboardView({
   summary,
@@ -503,7 +866,7 @@ export function DashboardView({
   if (isEmpty) {
     return (
       <div className="rounded-2xl p-6 text-center text-sm" style={{ background: C.card, border: `1px solid ${C.border}`, color: C.text2 }}>
-        No hay datos aún. Ve a Recap para cerrar tu primer mes.
+        No hay datos aún. Registra tus primeros ingresos y gastos para empezar.
       </div>
     )
   }
@@ -548,25 +911,19 @@ export function DashboardView({
     monthlyChange: a.monthlyChange,
   }))
 
-  // Savings (ahorro) = income - expenses this month
-  const ahorro = summary.monthlyIncome - summary.monthlyExpenses
-  const ahorroRatio = summary.monthlyIncome > 0
-    ? Math.round((ahorro / summary.monthlyIncome) * 100)
-    : 0
-
   return (
     <div style={{ background: C.bg }}>
-      {/* Recap pending banner */}
+      {/* Budget pending banner */}
       {!summary.hasCurrentMonthSnapshot && (
         <div className="rounded-xl px-4 py-3 flex items-center justify-between mb-4"
           style={{ background: 'rgba(245,158,11,0.08)', border: '1px solid rgba(245,158,11,0.3)' }}>
-          <p className="text-sm" style={{ color: C.amber }}>No has cerrado {summary.currentMonthLabel} aún</p>
+          <p className="text-sm" style={{ color: C.amber }}>No hay presupuesto definido para {summary.currentMonthLabel}</p>
           <Link
-            href={`/recap?year=${summary.currentYear}&month=${summary.currentMonth}`}
+            href={`/presupuesto?year=${summary.currentYear}&month=${summary.currentMonth}`}
             className="text-xs"
             style={{ color: C.amber }}
           >
-            Ir al Recap →
+            Ir a Presupuesto →
           </Link>
         </div>
       )}
@@ -619,31 +976,26 @@ export function DashboardView({
           </Card>
         )}
 
-        {/* Ahorro del mes */}
-        <Card delay={0.2}>
-          <CardHeader title="Ahorro del mes" />
-          <div className="flex flex-col items-center justify-center py-2 gap-1">
-            <p className="text-3xl font-bold tabular-nums" style={{ color: C.white }}>
-              {formatCurrency(ahorro)}
-            </p>
-            {summary.monthlyIncome > 0 && (
-              <p className="text-sm" style={{ color: C.emerald }}>
-                {ahorroRatio}% de los ingresos
-              </p>
-            )}
-            {summary.monthlyIncome > 0 && (
-              <div className="w-full mt-3 rounded-full h-2 overflow-hidden" style={{ background: C.faint }}>
-                <motion.div
-                  className="h-full rounded-full"
-                  style={{ background: `linear-gradient(90deg, ${C.primary}, ${C.emerald})` }}
-                  initial={{ width: 0 }}
-                  animate={{ width: `${Math.max(0, Math.min(ahorroRatio, 100))}%` }}
-                  transition={{ duration: 0.9, delay: 0.3, ease: [0.16, 1, 0.3, 1] }}
-                />
-              </div>
-            )}
-          </div>
-        </Card>
+        {/* Widget ingresos — dos meses */}
+        <WidgetIngresos
+          previousMonthIncome={summary.previousMonthIncome}
+          currentMonthIncome={summary.monthlyIncome}
+          previousMonthLabel={summary.previousMonthLabelShort}
+          currentMonthLabel={summary.currentMonthLabelShort}
+        />
+
+        {/* Widget ahorro — proyectado vs ejecutado */}
+        <WidgetAhorro
+          plannedSavings={summary.plannedSavings}
+          actualSavings={calculateActualSavings({
+            previousMonthIncome: summary.previousMonthIncome,
+            currentMonthExpenses: summary.monthlyExpenses,
+            currentMonthInvestments: summary.currentMonthInvestments,
+          })}
+          previousMonthIncome={summary.previousMonthIncome}
+          previousMonthLabel={summary.previousMonthLabelShort}
+          monthlyPnl={summary.monthlyPnl}
+        />
 
         {/* Accounts table */}
         {accountRows.length > 0 && (

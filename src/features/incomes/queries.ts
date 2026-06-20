@@ -1,6 +1,6 @@
 import { db } from '@/lib/db'
 import { incomes, incomeSources } from '@/db/schema'
-import { eq, and, gte, lt, desc } from 'drizzle-orm'
+import { eq, and, gte, lt, isNull, desc } from 'drizzle-orm'
 
 export type IncomeRow = {
   id: string
@@ -30,7 +30,11 @@ export async function listIncomesByBudgetMonth(year: number, month: number): Pro
     })
     .from(incomes)
     .leftJoin(incomeSources, eq(incomes.incomeSourceId, incomeSources.id))
-    .where(and(gte(incomes.budgetMonth, monthStart), lt(incomes.budgetMonth, monthEnd)))
+    .where(and(
+      gte(incomes.budgetMonth, monthStart),
+      lt(incomes.budgetMonth, monthEnd),
+      isNull(incomes.archivedAt),
+    ))
     .orderBy(desc(incomes.receivedAt))
     .then(rows => rows.map(r => ({
       id: r.id,
