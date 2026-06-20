@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest'
-import { computeAccountSummary, computeTotals, formatEvolutionMonth } from './domain'
+import { computeAccountSummary, computeTotals, formatEvolutionMonth, computeLivePatrimony } from './domain'
 
 describe('computeAccountSummary', () => {
   const account = { id: 'acc-1', name: 'Savings', color: '#10B981' }
@@ -79,6 +79,57 @@ describe('computeTotals', () => {
       { openingBalance: 200, closingBalance: 700 },
     ])
     expect(result.totalBalance).toBe(result.tdi)
+  })
+})
+
+describe('computeLivePatrimony', () => {
+  it('positive adjustment: more income than expenses and investments', () => {
+    const result = computeLivePatrimony({
+      liquidSnapshotTotal: 10000,
+      investmentSnapshotTotal: 5000,
+      incomesSinceSnapshot: 3000,
+      expensesSinceSnapshot: 500,
+      investmentsSinceSnapshot: 200,
+    })
+    expect(result.liquidAdjustment).toBe(2300) // 3000 - 500 - 200
+    expect(result.liveTotal).toBe(17300) // 10000 + 2300 + 5000
+  })
+
+  it('negative adjustment: expenses and investments exceed income', () => {
+    const result = computeLivePatrimony({
+      liquidSnapshotTotal: 8000,
+      investmentSnapshotTotal: 4000,
+      incomesSinceSnapshot: 500,
+      expensesSinceSnapshot: 1200,
+      investmentsSinceSnapshot: 300,
+    })
+    expect(result.liquidAdjustment).toBe(-1000) // 500 - 1200 - 300
+    expect(result.liveTotal).toBe(11000) // 8000 + (-1000) + 4000
+  })
+
+  it('zero adjustment when all inputs are zero (no snapshot)', () => {
+    const result = computeLivePatrimony({
+      liquidSnapshotTotal: 0,
+      investmentSnapshotTotal: 0,
+      incomesSinceSnapshot: 0,
+      expensesSinceSnapshot: 0,
+      investmentsSinceSnapshot: 0,
+    })
+    expect(result.liquidAdjustment).toBe(0)
+    expect(result.liveTotal).toBe(0)
+  })
+
+  it('investment executions reduce liquid side but not investment snapshot', () => {
+    const result = computeLivePatrimony({
+      liquidSnapshotTotal: 10000,
+      investmentSnapshotTotal: 5000,
+      incomesSinceSnapshot: 2000,
+      expensesSinceSnapshot: 200,
+      investmentsSinceSnapshot: 1500,
+    })
+    // Investment executions left the liquid side and are not yet in investment snapshot
+    expect(result.liquidAdjustment).toBe(300) // 2000 - 200 - 1500
+    expect(result.liveTotal).toBe(15300) // 10000 + 300 + 5000
   })
 })
 

@@ -6,7 +6,6 @@ export type DashboardRaw = {
   activeAccounts: { id: string; name: string; color: string; assetClassId: string | null }[]
   recentSnapshots: { accountId: string; month: Date; openingBalance: number; closingBalance: number; contributions: number }[]
   monthlyTotals: { month: Date; total: number }[]
-  incomeAdjustments: { accountId: string; month: Date; total: number }[]
   currentMonthExpenses: number
   currentMonthIncome: number
   currentMonthContributions: number
@@ -45,16 +44,6 @@ export async function getDashboardRaw(): Promise<DashboardRaw> {
     .where(and(isNull(monthlySnapshots.archivedAt), isNull(accounts.archivedAt)))
     .groupBy(monthlySnapshots.month)
     .orderBy(monthlySnapshots.month)
-
-  const incomeAdjRows = await db
-    .select({
-      accountId: incomes.toAccountId,
-      month: incomes.budgetMonth,
-      total: sum(incomes.amount),
-    })
-    .from(incomes)
-    .where(and(isNull(incomes.archivedAt), isNotNull(incomes.toAccountId)))
-    .groupBy(incomes.toAccountId, incomes.budgetMonth)
 
   const expensesRows = await db
     .select({ total: sum(transactions.amount) })
@@ -105,17 +94,123 @@ export async function getDashboardRaw(): Promise<DashboardRaw> {
       month: row.month,
       total: Number(row.total),
     })),
-    incomeAdjustments: incomeAdjRows
-      .filter(r => r.accountId != null)
-      .map((row) => ({
-        accountId: row.accountId!,
-        month: row.month,
-        total: Number(row.total ?? 0),
-      })),
     currentMonthExpenses: Number(expensesRows[0]?.total ?? 0),
     currentMonthIncome: Number(incomeRows[0]?.total ?? 0),
     currentMonthContributions,
     contributionsByAssetClass,
+  }
+}
+
+// ─── Live patrimony data ──────────────────────────────────────────────────────
+
+export type LivePatrimonyData = {
+  lastSnapshotDate: Date | null
+  liquidSnapshotTotal: number
+  investmentSnapshotTotal: number
+  incomesSinceSnapshot: number
+  expensesSinceSnapshot: number
+  investmentsSinceSnapshot: number
+}
+
+/**
+ * Fetches the components needed to compute live patrimony.
+ *
+ * The "last snapshot date" is MAX(month) of active monthly_snapshots.
+ * Liquid accounts are those without assetClassId; investment accounts have one.
+ * Incomes, expenses and investment executions are summed from that date onward.
+ */
+export async function getLivePatrimonyData(): Promise<LivePatrimonyData> {
+  const lastSnapshotRow = await db
+    .select({ lastMonth: sql<string | null>`MAX(${monthlySnapshots.month})` })
+    .from(monthlySnapshots)
+    .where(isNull(monthlySnapshots.archivedAt))
+
+  const lastSnapshotDate: Date | null = lastSnapshotRow[0]?.lastMonth
+    ? new Date(lastSnapshotRow[0].lastMonth)
+    : null
+
+  if (lastSnapshotDate === null) {
+    return {
+      lastSnapshotDate: null,
+      liquidSnapshotTotal: 0,
+      investmentSnapshotTotal: 0,
+      incomesSinceSnapshot: 0,
+      expensesSinceSnapshot: 0,
+      investmentsSinceSnapshot: 0,
+    }
+  }
+
+  // The snapshot's closingBalance already includes all movements of that month,
+  // so the adjustment must only count movements from the following month onward.
+  const nextMonthStart = new Date(Date.UTC(
+    lastSnapshotDate.getUTCFullYear(),
+    lastSnapshotDate.getUTCMonth() + 1,
+    1,
+  ))
+
+  const liquidSnapshotRows = await db
+    .select({ total: sum(monthlySnapshots.closingBalance) })
+    .from(monthlySnapshots)
+    .innerJoin(accounts, eq(monthlySnapshots.accountId, accounts.id))
+    .where(
+      and(
+        isNull(monthlySnapshots.archivedAt),
+        isNull(accounts.archivedAt),
+        isNull(accounts.assetClassId),
+        eq(monthlySnapshots.month, lastSnapshotDate),
+      ),
+    )
+
+  const investmentSnapshotRows = await db
+    .select({ total: sum(monthlySnapshots.closingBalance) })
+    .from(monthlySnapshots)
+    .innerJoin(accounts, eq(monthlySnapshots.accountId, accounts.id))
+    .where(
+      and(
+        isNull(monthlySnapshots.archivedAt),
+        isNull(accounts.archivedAt),
+        isNotNull(accounts.assetClassId),
+        eq(monthlySnapshots.month, lastSnapshotDate),
+      ),
+    )
+
+  const incomesSinceRows = await db
+    .select({ total: sum(incomes.amount) })
+    .from(incomes)
+    .where(
+      and(
+        isNull(incomes.archivedAt),
+        gte(incomes.receivedAt, nextMonthStart),
+      ),
+    )
+
+  const expensesSinceRows = await db
+    .select({ total: sum(transactions.amount) })
+    .from(transactions)
+    .where(
+      and(
+        isNull(transactions.archivedAt),
+        gte(transactions.paidAt, nextMonthStart),
+      ),
+    )
+
+  const investmentsSinceRows = await db
+    .select({ total: sum(investmentExecutions.amount) })
+    .from(investmentExecutions)
+    .where(
+      and(
+        isNull(investmentExecutions.archivedAt),
+        gte(investmentExecutions.executedAt, nextMonthStart),
+      ),
+    )
+
+  return {
+    lastSnapshotDate,
+    liquidSnapshotTotal: Number(liquidSnapshotRows[0]?.total ?? 0),
+    investmentSnapshotTotal: Number(investmentSnapshotRows[0]?.total ?? 0),
+    incomesSinceSnapshot: Number(incomesSinceRows[0]?.total ?? 0),
+    expensesSinceSnapshot: Number(expensesSinceRows[0]?.total ?? 0),
+    investmentsSinceSnapshot: Number(investmentsSinceRows[0]?.total ?? 0),
   }
 }
 

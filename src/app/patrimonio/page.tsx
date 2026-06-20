@@ -6,13 +6,14 @@ import {
 } from '@/features/accounts/queries'
 import {
   classifyAccountType,
-  calculateTotalPatrimony,
   calculateSavingsMetrics,
   calculateInvestmentMetrics,
   calculateInKindMetrics,
   type AccountKind,
   type MonthlyPoint,
 } from '@/features/accounts/domain'
+import { getLivePatrimonyData } from '@/features/dashboard/queries'
+import { computeLivePatrimony } from '@/features/dashboard/domain'
 import {
   PatrimonioBreakdown,
   type AccountChartData,
@@ -165,14 +166,13 @@ export default async function PatrimonioPage() {
   const history = await listAccountMonthlyHistory()
   const expenses = await listExpensesByAccountMonth()
   const rawSnapshots = await listAllSnapshotsByMonth()
+  const livePatrimonyData = await getLivePatrimonyData()
 
   const now = new Date()
   const recapYear = now.getUTCFullYear()
   const recapMonth = now.getUTCMonth() + 1
 
-  const totalPatrimony = calculateTotalPatrimony(
-    accounts.map(acc => acc.latestSnapshot?.closingBalance ?? 0),
-  )
+  const { liveTotal: totalPatrimony, liquidAdjustment } = computeLivePatrimony(livePatrimonyData)
 
   // Compute prevTotalPatrimony: sum of closingBalance for the penultimate month across all accounts
   const monthTotalsMap = new Map<string, number>()
@@ -276,6 +276,19 @@ export default async function PatrimonioPage() {
         <div className="rounded-xl bg-[#141925] border border-[#1E2A3A] p-5">
           <p className="text-[11px] uppercase tracking-wider text-[#64748B]">Patrimonio total</p>
           <p className="text-4xl font-bold text-white mt-1">{formatCurrency(totalPatrimony)}</p>
+          {liquidAdjustment !== 0 && (
+            <p className="text-[11px] text-[#64748B] mt-2 leading-relaxed">
+              <span className="text-[#34D399]">+ Ingresos del período: {formatCurrency(livePatrimonyData.incomesSinceSnapshot)}</span>
+              {' · '}
+              <span className="text-[#F87171]">− Gastos: {formatCurrency(livePatrimonyData.expensesSinceSnapshot)}</span>
+              {livePatrimonyData.investmentsSinceSnapshot > 0 && (
+                <>
+                  {' · '}
+                  <span className="text-[#FBBF24]">− Invertido: {formatCurrency(livePatrimonyData.investmentsSinceSnapshot)}</span>
+                </>
+              )}
+            </p>
+          )}
           {groups.length > 0 && (
             <div className="flex flex-wrap gap-x-4 gap-y-1 mt-3 text-xs text-[#94A3B8]">
               {groups.map(group => (
