@@ -6,12 +6,13 @@ import {
   getMonthlyContributions,
   getPreviousMonthIncome,
   getCurrentMonthInvestmentsTotal,
+  getLivePatrimonyData,
 } from '@/features/dashboard/queries'
 import {
   computeAccountSummary,
-  computeTotals,
   formatEvolutionMonth,
   computeDashboardBudgetSummary,
+  computeLivePatrimony,
 } from '@/features/dashboard/domain'
 import type { DashboardSummary, EvolutionPoint, AccountSummary } from '@/features/dashboard/domain'
 import { DashboardView } from '@/features/dashboard/components/dashboard-view'
@@ -32,6 +33,7 @@ export default async function DashboardPage() {
 
   // Sequential execution to avoid PgBouncer transaction-mode connection exhaustion
   const raw = await getDashboardRaw()
+  const livePatrimonyData = await getLivePatrimonyData()
   const budgetLines = await getDashboardBudgetLines(currentMonthStart, currentMonthEnd)
   const monthlyPnl = await getMonthlyPnlData()
   const monthlyContributions = await getMonthlyContributions()
@@ -57,52 +59,34 @@ export default async function DashboardPage() {
     snapshotsByAccount.set(s.accountId, list)
   }
 
-  // Income adjustments: accountId:monthMs → total
-  const incomeAdjMap = new Map<string, number>()
-  for (const adj of raw.incomeAdjustments) {
-    const key = `${adj.accountId}:${adj.month.getTime()}`
-    incomeAdjMap.set(key, (incomeAdjMap.get(key) ?? 0) + adj.total)
-  }
-  const incomeAdj = (accountId: string, month: Date) =>
-    incomeAdjMap.get(`${accountId}:${month.getTime()}`) ?? 0
-
   // Find the most recent month that has snapshots
   const allMonths = raw.recentSnapshots.map(s => s.month.getTime())
   const latestMonth = allMonths.length > 0 ? new Date(Math.max(...allMonths)) : null
 
-  // TAI / TDI / totalBalance from the latest month's snapshots (+ income adjustments)
+  // Live patrimony total via unified formula (liquid snapshot + adjustments + investment snapshot)
+  const { liveTotal: totalBalance } = computeLivePatrimony(livePatrimonyData)
+  // TAI and TDI derived from latest snapshots (historical, no live adjustment)
   const latestSnaps = latestMonth
-    ? raw.recentSnapshots
-        .filter(s => s.month.getTime() === latestMonth.getTime())
-        .map(s => ({ ...s, closingBalance: s.closingBalance + incomeAdj(s.accountId, s.month) }))
+    ? raw.recentSnapshots.filter(s => s.month.getTime() === latestMonth.getTime())
     : []
-  const { tai, tdi, totalBalance } = computeTotals(latestSnaps)
+  const tai = latestSnaps.reduce((acc, s) => acc + s.openingBalance, 0)
+  const tdi = latestSnaps.reduce((acc, s) => acc + s.closingBalance, 0)
 
-  // Build per-account summaries (effective closing = snapshot + income adjustment)
+  // Build per-account summaries using snapshot closingBalance directly (no per-account live adjustment)
   const accounts: AccountSummary[] = raw.activeAccounts.map(acc => {
     const snaps = (snapshotsByAccount.get(acc.id) ?? []).sort(
       (a, b) => b.month.getTime() - a.month.getTime(),
     )
     const latestSnap = snaps[0]
     const prevSnap = snaps[1]
-    const effectiveClosing = latestSnap
-      ? latestSnap.closingBalance + incomeAdj(acc.id, latestSnap.month)
-      : null
-    return computeAccountSummary(acc, effectiveClosing, prevSnap?.closingBalance ?? null)
+    return computeAccountSummary(acc, latestSnap?.closingBalance ?? null, prevSnap?.closingBalance ?? null)
   })
 
-  // Income adjustments summed by month for evolution chart
-  const incomeAdjByMonth = new Map<number, number>()
-  for (const adj of raw.incomeAdjustments) {
-    const key = adj.month.getTime()
-    incomeAdjByMonth.set(key, (incomeAdjByMonth.get(key) ?? 0) + adj.total)
-  }
-
-  // All evolution points with income adjustments applied
+  // Historical evolution points — snapshot totals without live adjustment (they are historical facts)
   const allEvolution: EvolutionPoint[] = raw.monthlyTotals
     .map(m => ({
       month: formatEvolutionMonth(m.month),
-      total: m.total + (incomeAdjByMonth.get(m.month.getTime()) ?? 0),
+      total: m.total,
     }))
 
   // Current month snapshot check

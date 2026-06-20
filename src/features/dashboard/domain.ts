@@ -96,6 +96,35 @@ export function resolveGain(gainManual: number | null, closing: number, opening:
   return gainManual ?? (closing - opening - contributions)
 }
 
+// ─── Live patrimony calculation ──────────────────────────────────────────────
+
+export type LivePatrimonyInput = {
+  liquidSnapshotTotal: number
+  investmentSnapshotTotal: number
+  incomesSinceSnapshot: number
+  expensesSinceSnapshot: number
+  investmentsSinceSnapshot: number
+}
+
+export type LivePatrimonyResult = {
+  liveTotal: number
+  // positive = net inflow (more income than expenses+investments), negative = net outflow
+  liquidAdjustment: number
+}
+
+/**
+ * Computes the live patrimony total between states of position.
+ *
+ * Liquid side: snapshot total + ingresos - gastos - investment executions.
+ * Investment side: snapshot total unchanged (no real-time price updates).
+ * Total = liquid side + investment side.
+ */
+export function computeLivePatrimony(data: LivePatrimonyInput): LivePatrimonyResult {
+  const liquidAdjustment = data.incomesSinceSnapshot - data.expensesSinceSnapshot - data.investmentsSinceSnapshot
+  const liveTotal = data.liquidSnapshotTotal + liquidAdjustment + data.investmentSnapshotTotal
+  return { liveTotal, liquidAdjustment }
+}
+
 export type BudgetLineDisplay = {
   label: string
   color: string
